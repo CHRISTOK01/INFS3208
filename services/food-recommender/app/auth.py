@@ -7,7 +7,7 @@ What's inside a token that we care about:
   sub   the user's ID, as a string (e.g. "42")
   exp   when the token expires
   role  "user" for a person, or "service" when one of our own services is calling
-        (e.g. meal-logging catching up on meals it couldn't calculate earlier)
+        (e.g. meal-logging sending a day's food to nutrient-calc for a user)
 """
 import jwt
 from fastapi import Depends, HTTPException, status

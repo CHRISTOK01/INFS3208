@@ -4,7 +4,10 @@ uvicorn[standard]==0.54.0
 psycopg[binary]==3.3.6
 psycopg-pool==3.3.3
 pyjwt==2.15.1
+redis==8.1.0
+bcrypt==5.0.0
+# Used to call nutrient-calc. FastAPI's test client needs it too.
+httpx2==2.13.1
 
 # For the tests. They're kept in the image so `docker compose run --rm meal-logging pytest` works.
 pytest==9.1.1
-httpx2==2.13.1

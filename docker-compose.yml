@@ -105,6 +105,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       APP_VERSION: ${APP_VERSION:-1.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # It doesn't wait for nutrient-calc on purpose. If nutrient-calc is down, meals still get
+    # saved and are marked "pending" until it's back.
     depends_on:
       meal-db: { condition: service_healthy }
       redis: { condition: service_healthy }

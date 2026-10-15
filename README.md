@@ -24,7 +24,8 @@ the right service. More detail on the design is in [docs/architecture.md](docs/a
 - [x] Phase 1: project setup (Docker Compose, 4 databases, Redis, gateway)
 - [x] Phase 2: USDA food data loaded (875,006 rows)
 - [x] Phase 3a: nutrient-calc service
-- [ ] Phase 3b to 3d: meal-logging, gap-analysis, food-recommender
+- [x] Phase 3b: meal-logging service
+- [ ] Phase 3c and 3d: gap-analysis, food-recommender
 - [ ] Phase 4: React frontend and demo users
 - [ ] Phase 5: load test and failure test
 - [ ] Phase 6: final README
@@ -100,6 +101,78 @@ Each service has a page in your browser where you can try out its API, for examp
 http://localhost:8080/api/nutrients/docs. Swap `nutrients` for `meals`, `gaps` or `recommend` to see
 the others.
 
+## What the finished services can do
+
+**meal-logging** (`/api/meals/...`)
+
+| What | Endpoint | Login needed? |
+|---|---|---|
+| Make an account, log in, see who you are | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | only for `/me` |
+| Search foods by name (raw or cooked first if you ask) | `GET /foods/search?q=banana&state=raw` | no |
+| Look up a packaged food by barcode | `GET /foods/barcode/{code}` | no |
+| See a food and its household portions | `GET /foods/{fdc_id}` | no |
+| Log a meal (in grams, or as portions) | `POST /meals` | yes |
+| List, view and delete meals; add or remove food | `GET /meals?start&end`, `GET /meals/{id}`, `DELETE /meals/{id}`, `POST /meals/{id}/items`, `DELETE /meals/{id}/items/{item_id}` | yes |
+| Send days that nutrient-calc missed while it was down | `POST /meals/recalculate-pending` | yes |
+| Saved recipes: save, list, delete, log again in one click | `POST /recipes`, `GET /recipes`, `DELETE /recipes/{id}`, `POST /recipes/{id}/log` | yes |
+
+**nutrient-calc** (`/api/nutrients/...`)
+
+| What | Endpoint | Login needed? |
+|---|---|---|
+| List the nutrients we track | `GET /nutrients` | no |
+| What's in 100 g of a food | `GET /foods/{fdc_id}` | no |
+| Add up the nutrients in a list of foods | `POST /calculate` | yes |
+| Save or read a user's daily totals | `PUT /daily/{user_id}/{date}`, `GET /daily/{user_id}?start&end` | yes |
+
+## Trying out meal-logging
+
+The easiest way is the API page in your browser: http://localhost:8080/api/meals/docs. Register,
+copy the `token` from the reply, click **Authorize** at the top and paste it in. Then you can try
+any endpoint with **Try it out**.
+
+Or from PowerShell:
+
+```powershell
+# Search for a food (no login needed). Run it twice: the X-Cache header goes from MISS to HIT.
+#   -i  show the headers as well as the reply
+curl.exe -i "http://localhost:8080/api/meals/foods/search?q=banana"
+
+# See a food's household portions, like "1 medium = 118 g"
+curl.exe http://localhost:8080/api/meals/foods/173944
+
+# Look up a packaged food by its barcode
+curl.exe http://localhost:8080/api/meals/foods/barcode/20048556
+
+# Make an account. The reply has a "token" you need for everything below.
+#   -X POST   send a POST request
+#   -H        add a header (here, saying the body is JSON)
+#   -d        the request body
+curl.exe -X POST http://localhost:8080/api/meals/auth/register -H "Content-Type: application/json" -d '{\"email\":\"me@example.com\",\"password\":\"password123\"}'
+
+# Save the token so you don't have to paste it every time (put your own token in the quotes)
+$TOKEN = "paste-the-token-here"
+
+# Log 100 g of raw spinach for lunch
+curl.exe -X POST http://localhost:8080/api/meals/meals -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{\"meal_date\":\"2026-10-15\",\"meal_type\":\"lunch\",\"items\":[{\"fdc_id\":168462,\"grams\":100}]}'
+
+# See that day's meals
+curl.exe "http://localhost:8080/api/meals/meals?start=2026-10-15" -H "Authorization: Bearer $TOKEN"
+```
+
+**What happens if nutrient-calc is down:**
+
+```powershell
+# Stop nutrient-calc
+docker compose stop nutrient-calc
+
+# Log a meal (same command as above). It still saves, but says "calc_status": "pending".
+
+# Start nutrient-calc again, wait about 10 seconds, then send the waiting days
+docker compose start nutrient-calc
+curl.exe -X POST http://localhost:8080/api/meals/meals/recalculate-pending -H "Authorization: Bearer $TOKEN"
+```
+
 ## Running the tests
 
 ```bash
@@ -110,6 +183,10 @@ docker compose run --rm nutrient-calc pytest -v
 # Same again, but also run the tests that use the real database
 #   -e INTEGRATION=1  turn on the database tests
 docker compose run --rm -e INTEGRATION=1 nutrient-calc pytest -v
+
+# meal-logging's tests. The INTEGRATION=1 ones need the food data loaded and nutrient-calc running.
+#   -e INTEGRATION=1  turn on the tests that use the real databases, Redis and nutrient-calc
+docker compose run --rm -e INTEGRATION=1 meal-logging pytest -v
 
 # Run the data loader's tests
 #   --entrypoint pytest  run pytest instead of the loader

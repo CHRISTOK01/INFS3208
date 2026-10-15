@@ -25,7 +25,7 @@ CREATE TABLE targets (
     PRIMARY KEY (user_id, nutrient_key)
 );
 
--- Recommended intakes by age and sex. Filled in from a CSV file in phase 2.
+-- Recommended intakes by age and sex. Filled in by the data loader from etl/reference_intakes.csv.
 -- Every value has to be checked against the official NHMRC tables. `verified` stays false until then.
 CREATE TABLE reference_intakes (
     id            SERIAL PRIMARY KEY,

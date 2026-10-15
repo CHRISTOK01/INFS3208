@@ -15,8 +15,10 @@ When one service needs something from another, it makes a normal REST call using
 service's name, for example `http://nutrient-calc:8002`. The addresses come from environment variables.
 
 - meal-logging calls nutrient-calc with `PUT /api/nutrients/daily/{user}/{date}`, sending all of that day's food
-- gap-analysis calls nutrient-calc with `GET /api/nutrients/daily/{user}?start&end` to get the recent history
-- food-recommender asks gap-analysis for the user's biggest gaps and how many calories they have left
+- gap-analysis will call nutrient-calc with `GET /api/nutrients/daily/{user}?start&end` to get the recent history (not built yet)
+- food-recommender will ask gap-analysis for the user's biggest gaps and how many calories they have left (not built yet)
+
+There are no message queues. Every call is a plain request that waits for its answer.
 
 ## Design choices, and why we made them
 
@@ -64,11 +66,11 @@ on the label. Here's how many of our 43,593 foods have a value, from the last lo
 So `is_complete` on its own is too harsh. One muesli bar with no magnesium on its label would mark
 the whole day's magnesium as incomplete. `coverage_pct` is the share of the day's food, by weight,
 that had a value. If it's 95%, the total is close to the truth. If it's 20%, the total is only a
-"you had at least this much" figure. gap-analysis uses it to decide between "low" and "not enough
-data".
+"you had at least this much" figure. gap-analysis will use it to decide between "low" and "not
+enough data".
 
-**Iodine is left out of gap analysis and recommendations.** USDA has hardly any iodine data, so
-it would show as unknown almost every day. nutrient-calc still stores and reports what there is.
+**Iodine will be left out of gap analysis and recommendations.** USDA has hardly any iodine data,
+so it would show as unknown almost every day. nutrient-calc still stores and reports what there is.
 
 **Plain SQL with psycopg 3, no ORM.** The SQL stays visible and easy to explain, and psycopg's
 built-in COPY support makes bulk loading the USDA data fast.
@@ -100,4 +102,38 @@ A token says three things about whoever holds it:
 - `role`: either `user` (a person) or `service` (one of our services acting behind the scenes)
 
 People can only see and change their own data. A `service` token is allowed to act for any user.
-meal-logging uses one of those when it catches up on meals that couldn't be calculated earlier.
+meal-logging makes a short-lived (60 second) one every time it sends a day's food to nutrient-calc.
+
+Passwords are stored as bcrypt hashes, never as the password itself.
+
+## meal-logging: keeping nutrient-calc up to date
+
+When someone adds or deletes food, meal-logging:
+
+1. saves the change and adds that day to the `pending_days` list, then commits both together
+2. sends the whole day to nutrient-calc (`PUT /api/nutrients/daily/{user}/{date}`)
+3. if that works, takes the day off the list and marks its items `calc_status = 'done'`
+
+meal-logging doesn't need nutrient-calc to start or to save meals. That's why `docker-compose.yml`
+doesn't make it wait for nutrient-calc.
+
+If nutrient-calc is down, step 3 doesn't happen. The meal is still saved, the reply says
+`"calc_status": "pending"`, and `POST /api/meals/meals/recalculate-pending` sends the waiting days
+later. We need a list of days, not just `calc_status` on each item: if you delete the only meal on
+a day, there are no items left to mark, but nutrient-calc still has the old totals.
+
+**One change to a day at a time.** Before changing or sending a day, meal-logging takes a lock
+named after that user and day (a Postgres "advisory lock", `pg_advisory_xact_lock`). Without it,
+two meals saved at the same moment could each send nutrient-calc a day that's missing the other
+one. The lock is kept in the database, so it works however many copies of meal-logging are running.
+
+**Food search is cached in Redis for an hour.** The `X-Cache` header on a search says `HIT` or
+`MISS`. If Redis is down, searches go straight to the database. After a Redis error, meal-logging
+leaves Redis alone for 30 seconds, so only one search waits for it to fail.
+
+**Search order:** foods matching your raw/cooked choice, then names starting with the first word
+you typed, then Foundation, SR Legacy, FNDDS, Branded, then the closest match. Every word you type
+has to appear in the name, and the trigram index keeps this to a few milliseconds.
+
+**Barcodes** are compared with leading zeros removed, because USDA stores some with extra zeros
+(`0000020048556`) that a scanner wouldn't give you.

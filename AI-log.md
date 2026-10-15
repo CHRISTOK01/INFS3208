@@ -60,3 +60,22 @@ and marked iodine as not used in gap analysis.
 - `docs/architecture.md`, `etl/REFERENCE_INTAKES_TODO.md`
 
 ---
+
+## 4. meal-logging service
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Wrote the meal-logging service: registration and login (bcrypt, JWT), food
+search with a Redis cache, barcode lookup, portion-to-grams conversion, meals, saved recipes, and
+sending each day to nutrient-calc with a pending list for when it's down. Also wrote its unit and
+integration tests, and updated the README and architecture notes.
+
+**Prompts Used:**
+- "I committed, now start doing meal-logging service, if you need me to clarify anything, just ask,
+  if not, go ahead"
+
+**Where the AI/MT Tool Was Used:**
+- `services/meal-logging/` (all files in `app/` and `tests/`, plus `db/init.sql` and `requirements.txt`)
+- `README.md`, `docs/architecture.md`
+
+---

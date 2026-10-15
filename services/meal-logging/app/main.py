@@ -1,10 +1,10 @@
-"""meal-logging: for now this only has /health, /ready and /version. The real endpoints come in its own phase."""
+"""meal-logging: accounts and logins, finding foods, and logging meals and saved recipes."""
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import config, db
+from app import config, db, routes_auth, routes_foods, routes_meals, routes_recipes
 from app.common import health_router, install_common, setup_logging
 
 setup_logging()
@@ -38,3 +38,7 @@ install_common(app)
 app.include_router(health_router)
 # ...and the same again under our path, so they can be reached through the gateway (the website footer uses /version)
 app.include_router(health_router, prefix=config.API_PREFIX)
+
+# The real endpoints: /api/meals/auth, /api/meals/foods, /api/meals/meals and /api/meals/recipes
+for module in (routes_auth, routes_foods, routes_meals, routes_recipes):
+    app.include_router(module.router, prefix=config.API_PREFIX)

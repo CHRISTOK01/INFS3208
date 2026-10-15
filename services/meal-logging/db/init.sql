@@ -29,7 +29,10 @@ CREATE TABLE food_catalogue (
     has_full_micros  BOOLEAN NOT NULL DEFAULT false
 );
 CREATE INDEX food_catalogue_name_trgm ON food_catalogue USING GIN (name gin_trgm_ops);
-CREATE INDEX food_catalogue_barcode   ON food_catalogue (barcode) WHERE barcode IS NOT NULL;
+-- Barcodes are stored the way USDA gives them, which is sometimes with extra zeros in front
+-- (e.g. 0000020048556). A scanner might give 20048556. So we look them up with the leading
+-- zeros removed, and this index makes that lookup fast.
+CREATE INDEX food_catalogue_barcode ON food_catalogue (ltrim(barcode, '0')) WHERE barcode IS NOT NULL;
 
 -- Everyday measures and what they weigh, e.g. "1 cup, chopped" = 128 g
 CREATE TABLE food_portion (
@@ -51,7 +54,7 @@ CREATE TABLE meals (
 CREATE INDEX meals_user_date ON meals (user_id, meal_date);
 
 -- We always store how many grams were eaten. Everything else is worked out from that.
--- calc_status stays 'pending' until nutrient-calc confirms it has added this item to the day's totals.
+-- calc_status stays 'pending' until nutrient-calc confirms it has counted this item in the day's totals.
 CREATE TABLE meal_items (
     id            BIGSERIAL PRIMARY KEY,
     meal_id       BIGINT  NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
@@ -80,3 +83,15 @@ CREATE TABLE saved_recipe_items (
     state      TEXT CHECK (state IN ('raw', 'cooked'))
 );
 CREATE INDEX saved_recipe_items_recipe ON saved_recipe_items (recipe_id);
+
+-- Days whose food has changed but haven't been sent to nutrient-calc yet.
+-- Every time a meal is added or deleted, its day goes on this list in the same transaction.
+-- Once nutrient-calc has the new totals, the day comes off the list. If nutrient-calc is down,
+-- the day just stays here until POST /api/meals/meals/recalculate-pending sends it.
+-- (We need this as well as calc_status: if you delete the only meal on a day, there are no
+-- items left to mark as pending, but nutrient-calc still has the old totals.)
+CREATE TABLE pending_days (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    meal_date  DATE   NOT NULL,
+    PRIMARY KEY (user_id, meal_date)
+);
