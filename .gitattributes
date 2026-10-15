@@ -1,0 +1,3 @@
+# Keep Linux-style line endings (LF) in every text file, even on Windows.
+# These files end up inside Linux containers, where Windows line endings can break things.
+* text=auto eol=lf

@@ -1,0 +1,24 @@
+# Your real settings and secrets. Only .env.example goes into git.
+.env
+
+# The USDA CSV files are several GB, so they stay out of git.
+# Run etl/download_usda.py to get them. The .gitkeep file just keeps the empty folder in git.
+etl/data/*
+!etl/data/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+dist/
+
+# Editor and OS clutter
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

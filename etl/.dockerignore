@@ -1,0 +1,4 @@
+# The data is mounted when the container runs, so keep it out of the image
+data/
+__pycache__/
+*.pyc

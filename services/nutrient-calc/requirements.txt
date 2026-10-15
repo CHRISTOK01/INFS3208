@@ -1,0 +1,10 @@
+# Checked: all of these install from ready-made Python 3.14 Linux packages (python:3.14-slim).
+fastapi==0.143.1
+uvicorn[standard]==0.54.0
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+pyjwt==2.15.1
+
+# For the tests. They're kept in the image so `docker compose run --rm nutrient-calc pytest` works.
+pytest==9.1.1
+httpx2==2.13.1
