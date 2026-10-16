@@ -271,7 +271,7 @@ person, including pregnancy and breastfeeding.
 
 ---
 
-## 9. Smarter food search
+## 8. Smarter food search
 
 **AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
 
@@ -301,7 +301,7 @@ are mixed together and named differently.
 
 ---
 
-## 10. food-recommender service
+## 9. food-recommender service
 
 **AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
 
@@ -334,5 +334,79 @@ gap-analysis finds.
 - `services/gap-analysis/app/routes.py`, `app/targets.py`, `tests/test_targets.py`
 - `etl/ausnut.py`, `etl/usda.py`, `etl/load_usda.py`, `etl/tests/test_ausnut.py`
 - `README.md`, `docs/architecture.md`, `etl/README.md`
+
+---
+
+## 10. Website, demo users, load test and failure tests
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Building the React website, the demo users, the load test and the final README,
+and running the failure tests.
+
+**Prompts Used:**
+- "aight now lets do frontend and whatever else we need to finish off to be fully complete from a code point of view locally"
+
+**What Claude Code did and gave back:**
+- Built the React website (Vite, Chart.js, Firebase login): log in or sign up with email or Google;
+  a profile form with pregnancy and breastfeeding; a dashboard with energy and macros left, a
+  vitamins and minerals chart, a 14-day energy chart, limits, and 7/14-day gaps; food search,
+  barcode lookup, portions, saved recipes and catching up pending totals; food suggestions; and a
+  footer showing each service's version and which container answered. Added its two-stage
+  Dockerfile and Nginx config, and sent the gateway's `/` to it.
+- Gave it a design system in `styles.css`: colour, size and shadow tokens with automatic dark mode,
+  bundled Inter and Fraunces fonts, and one colour per macro used everywhere. Added shared pieces:
+  a line icon set and logo, pop-up notices, progress meters, an energy ring, segmented controls, a
+  number stepper, a day picker, loading placeholders and empty states. On phones the tabs move to a
+  bottom bar.
+- Checked the logged-in pages in a browser using recorded API answers (so no password was typed),
+  in light and dark mode, and fixed what looked wrong: faint chart bars in dark mode, a bite-size
+  default portion, wrapped labels, misaligned tables, and "0 left" when over the energy target.
+- Added `GET /api/meals/auth/config` so the website gets its login settings when it loads, instead
+  of having them built in.
+- Wrote `etl/seed_demo_users.py`, which makes 4 demo users through the real API with 3 weeks of
+  meals each, chosen to leave gaps in magnesium, iron, vitamin D, and iron in pregnancy, and checked
+  each one shows up. Fixed it using the container's UTC date instead of the local date.
+- Wrote the load test (`loadtest/`), and found and fixed `docker compose run` putting scaled-up
+  services back to one copy. Ran it with 3 meal-logging and 2 nutrient-calc copies (about 115
+  requests a second, shared evenly, no failures).
+- Ran the failure tests: killing a copy during the load test, stopping nutrient-calc, and stopping
+  a database. Made food-recommender pass on gap-analysis's own error message, and added health
+  checks for the gateway and the website.
+- Rewrote the README with setup, the demo users, the website, the API, tests, and the load and
+  failure demos with their results, and updated the architecture notes.
+
+**Where the AI/MT Tool Was Used:**
+- `frontend/` (all files)
+- `etl/seed_demo_users.py`, `loadtest/loadtest.py`, `loadtest/Dockerfile`
+- `services/meal-logging/app/routes_auth.py`, `app/config.py`, `tests/test_api.py`
+- `services/food-recommender/app/routes.py`, `tests/test_api.py`
+- `docker-compose.yml`, `gateway/nginx.conf`
+- `README.md`, `docs/architecture.md`
+
+---
+
+## 11. Fix: food suggestions empty after going over a limit
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Fixing food suggestions showing nothing once someone had gone over a daily limit.
+
+**Prompts Used:**
+- "The food suggestions arent seem to be working. It just says no foods fit right now, even when i do search foods rich in whatever too"
+
+**What Claude Code did and gave back:**
+- Reproduced it with a demo user: after one very salty, fatty meal, both "for my gaps" and "rich in"
+  gave no foods. The rule "a serve can't take today's total over a limit" ruled out nearly every
+  food once the person was already over on sodium, because nearly every food has some.
+- Changed the rule so that once someone is over a limit, a serve with up to 10% of that limit is
+  still allowed (a limit of zero, like alcohol in pregnancy, still allows none). After the same
+  meal there were 8 suggestions again, all light, low-salt foods.
+- When nothing fits, the reply now says why (for example "most foods would take you over your
+  limit for sodium today"), instead of a general note. Added tests for both.
+
+**Where the AI/MT Tool Was Used:**
+- `services/food-recommender/app/rules.py`, `app/routes.py`, `tests/test_rules.py`
+- `docs/architecture.md`
 
 ---

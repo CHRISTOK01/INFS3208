@@ -8,7 +8,7 @@ browser ──► gateway (Nginx :8080)   (on GKE this becomes the Ingress)
               ├─ /api/nutrients/...  ─► nutrient-calc    (8002) ─► nutrient-db (nutrient_db)
               ├─ /api/gaps/...       ─► gap-analysis     (8003) ─► gap-db (gap_db)
               ├─ /api/recommend/...  ─► food-recommender (8004) ─► recommender-db (recommender_db)
-              └─ /                   ─► frontend (Nginx serving the React build)  [phase 4]
+              └─ /                   ─► frontend         (Nginx serving the React build)
 ```
 
 When one service needs something from another, it makes a normal REST call using the other
@@ -104,6 +104,13 @@ A service only accepts a Google token if:
 - (we allow 30 seconds of difference between Google's clock and ours, because a brand-new token
   can otherwise look like it was made "in the future" and get rejected straight after signing up)
 
+**On the website**, Google's Firebase library does the logging in (email and password, or the
+"Continue with Google" button). It keeps the person logged in between visits and hands the website
+a fresh token whenever it asks, renewing it before it expires. The website needs the project ID
+and the public Web API key to start it, and gets them from `GET /api/meals/auth/config` when it
+loads, rather than having them built in. That way the same website image works on any computer or
+cluster, just like the services.
+
 The token's `sub` is the person's Google ID (a string like `"Xy7kP2..."`). Every service stores
 people's data under that ID, so the `user_id` columns are text.
 
@@ -119,8 +126,8 @@ ours use HS256 (the shared secret).
 People can only see and change their own data. If Google's keys can't be downloaded, requests that
 need a login get a 503 ("can't check logins right now") rather than a confusing 401.
 
-**On Kubernetes**, `JWT_SECRET` goes into a Kubernetes Secret and `GOOGLE_PROJECT_ID` into a
-ConfigMap. The code doesn't change.
+**On Kubernetes**, `JWT_SECRET` goes into a Kubernetes Secret, and `GOOGLE_PROJECT_ID` and
+`GOOGLE_API_KEY` into a ConfigMap. The code doesn't change.
 
 ## meal-logging: keeping nutrient-calc up to date
 
@@ -250,7 +257,7 @@ tried the first portion size AUSNUT lists for each food first, but that's often 
 | No raw or dry forms of foods you'd cook (raw chicken, dry rice, dried lentils, raw potato) | raw fruit, vegetables, nuts and seeds are fine |
 | Vegetarians get no meat or fish; vegans also no eggs or dairy (plant milks are fine) | worked out from the food group code, e.g. 5011 is meat and 4037 is calcium-enriched plant milk |
 | In pregnancy, nothing FSANZ advises against: soft cheeses, pate, smoked seafood, sprouts, rockmelon (listeria), and shark, billfish, orange roughy and catfish (mercury) | FSANZ listeria and mercury-in-fish advice |
-| A serve can't take today's total over a limit (sodium, caffeine, iron's upper limit...) | the vitamin A limit is only checked for animal foods, because it's for retinol and plants have beta-carotene instead |
+| A serve can't take today's total over a limit (sodium, caffeine, iron's upper limit...). Once you're already over, a serve with up to 10% of the limit is still fine | otherwise one salty meal would rule out nearly every food for the rest of the day. A limit of zero (alcohol in pregnancy) still allows none. The vitamin A limit is only checked for animal foods, because it's for retinol and plants have beta-carotene instead |
 | A serve can't have more energy than is left today (but 150 kcal is always allowed) | so there's still something to suggest once the day's energy is used up |
 | It has to make up at least 10% of one shortfall | otherwise it's not really helping |
 
@@ -267,6 +274,58 @@ Each suggestion explains itself, like "A standard serve (100 g) gives 8.8 ug of 
 of what you're short each day), 114 ug of selenium (100%) and 5 ug of vitamin D (99%), for 124
 kcal." (that one is cooked sardines).
 
+**If nothing fits**, the first note says why, using the most common reason that's about today (like "most foods would take you over your limit for sodium today").
+
 **If gap-analysis is down** it replies 503, and 404 if the person hasn't filled in their profile.
 Adding `&nutrient=iron` skips the gaps and finds good sources of that nutrient, with the whole daily
 target as the "shortfall".
+
+## The website
+
+The website (`frontend/`) is a React app built with Vite. It's kept simple: plain React hooks for
+state, and one small `fetch` wrapper (`src/api.js`) that adds the login token to each request and
+turns errors into readable messages. The only libraries are Chart.js (for the charts), Firebase
+(for logging in) and two font packages, which are bundled into the build so the site never calls
+Google Fonts.
+
+**The look** comes from one stylesheet (`src/styles.css`). Every colour, size and shadow is a
+variable set once at the top, and dark mode just gives those variables different values. Each macro
+has one colour used everywhere (protein is always blue, for example), coral always means "short
+on", and amber means "near a limit". The small shared pieces (icons, meters, the energy ring,
+segmented controls, pop-up notices, loading placeholders) are in `src/components/`.
+
+**Every API address is relative** (`/api/meals/...`, with no server name), so the browser sends it
+to whatever served the page: the gateway here, the Ingress on Kubernetes. The same build works in
+both, and there's no CORS to set up, because the page and the API come from the same place.
+
+**It's built into plain files** in a two-stage Docker build: a Node image runs `npm ci` and
+`vite build`, then only the built files are copied into a small Nginx image. Nginx sends any
+unknown path back to `index.html`, so reloading the page anywhere still works. `index.html` is
+never cached and the other files have a fingerprint in their names, so a new version shows up
+straight away after a rolling update.
+
+**It copes with parts of the app being down.** The dashboard asks for today and the 14-day report
+separately, so if one fails the other still shows. A meal saved while nutrient-calc is down shows
+"totals pending", with a button to catch up. A report sent from the last saved results says it's
+out of date.
+
+**The footer** checks each service's `/version` every 30 seconds and shows the `X-Served-By` header
+from the last answer, so you can watch load balancing, a rolling update or a rollback happen.
+
+## Demo users and the load test
+
+`etl/seed_demo_users.py` makes 4 demo users through the real API, exactly as the website would:
+it logs in through Google's login API (making the account the first time), saves a profile, and
+logs 3 weeks of meals with `POST /api/meals/meals`. Each person's meals are chosen to leave a
+specific gap (magnesium, iron, vitamin D, and iron in pregnancy). It uses fixed AUSNUT food IDs,
+and the same random seed each time, so running it again gives the same results.
+
+`loadtest/loadtest.py` runs any number of simulated people at once (one thread each), each
+searching, logging a meal (which makes meal-logging call nutrient-calc) and asking nutrient-calc to
+add up some food. It reports requests a second, median and 95th percentile times, failures, and how
+the requests were shared between copies of each service. Both scripts only use Python's standard
+library.
+
+**The load test's compose entry has no `depends_on` on purpose.** `docker compose run` starts the
+dependencies of what it runs, and starting the services puts any you've scaled up back to one
+copy, which would spoil a load-balancing demo.

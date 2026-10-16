@@ -6,9 +6,23 @@ no register or login endpoint here; auth.py just checks the token.
 """
 from fastapi import APIRouter, Depends
 
-from app import auth
+from app import auth, config
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/config")
+def login_config():
+    """What the website needs to show Google's login: the project and its Web API key.
+
+    The website asks for this when it loads, rather than having it built in, so the same website
+    build works on any computer or cluster. The key isn't a secret; Google expects it to be public.
+    """
+    return {
+        "api_key": config.GOOGLE_API_KEY,
+        "project_id": config.GOOGLE_PROJECT_ID,
+        "auth_domain": f"{config.GOOGLE_PROJECT_ID}.firebaseapp.com",   # Google's login pages for the project
+    }
 
 
 @router.get("/me")

@@ -102,6 +102,29 @@ def test_not_over_a_limit_today():
     assert rules.why_not(bread, OMNIVORE, {"sodium": {"amount": 1000, "upper_limit": 2000}}, 2000) is None
 
 
+def test_once_over_a_limit_foods_with_only_a_little_are_still_fine():
+    over = {"sodium": {"amount": 3000, "upper_limit": 2000}}
+    banana = food("Banana, raw", 301, {"sodium": 1})               # 1.5 mg in 150 g
+    bread = food("Bread, white", 1021, {"sodium": 1000})           # 400 mg in a 40 g slice
+    assert rules.why_not(banana, OMNIVORE, over, 2000) is None
+    assert "sodium" in rules.why_not(bread, OMNIVORE, over, 2000)   # more than 10% of the limit (200 mg)
+
+
+def test_a_limit_of_none_still_allows_none():
+    pregnant = {"alcohol": {"amount": 0, "upper_limit": 0}}
+    assert "alcohol" in rules.why_not(food("Wine-poached pear", 301, {"alcohol": 1}), OMNIVORE, pregnant, 2000)
+
+
+def test_why_nothing_fits_explains_the_day():
+    over = {"sodium": {"amount": 9000, "upper_limit": 2000}}
+    salty = [food("Bread, white", 1021, {"sodium": 1000}, fdc_id=i) for i in range(3)]
+    assert rules.why_nothing_fits(salty, OMNIVORE, over, 1000) == (
+        "Nothing fits today: most foods would take you over your limit for sodium today. Check back tomorrow.")
+    filling = [food("Beef, grilled", 5011, {}, kcal=500)]          # 325 kcal a serve
+    assert "used up today's energy" in rules.why_nothing_fits(filling, OMNIVORE, {}, 0)
+    assert rules.why_nothing_fits([LENTILS], OMNIVORE, {}, 2000) is None
+
+
 def test_the_vitamin_a_limit_only_counts_animal_foods():
     limit = {"vitamin_a": {"amount": 0, "upper_limit": 3000}}
     liver = food("Liver, lamb, fried", 5011, {"vitamin_a": 20000})   # 13,000 ug in 65 g

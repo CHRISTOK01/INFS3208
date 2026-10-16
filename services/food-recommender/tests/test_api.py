@@ -117,3 +117,13 @@ def test_gap_analysis_down_gives_503(fakes, monkeypatch):
     monkeypatch.setattr(gap_client, "get_today", down)
     response = client.get(URL, headers=login())
     assert response.status_code == 503 and "gap-analysis" in response.json()["detail"]
+
+
+def test_gap_analysis_errors_are_passed_on(fakes, monkeypatch):
+    def nutrient_calc_down(uid, day):
+        request = httpx2.Request("GET", "http://gap-analysis")
+        response = httpx2.Response(503, json={"detail": "nutrient-calc is unavailable"}, request=request)
+        raise httpx2.HTTPStatusError("503", request=request, response=response)
+    monkeypatch.setattr(gap_client, "get_today", nutrient_calc_down)
+    response = client.get(URL, headers=login())
+    assert response.status_code == 503 and response.json()["detail"] == "nutrient-calc is unavailable"

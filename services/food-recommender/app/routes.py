@@ -22,7 +22,12 @@ def ask_gap_analysis(call, user_id: str, day: date) -> dict:
         if exc.response.status_code == 404:
             raise HTTPException(404, "No profile yet. Fill in your details first, then we can suggest foods.")
         log.warning("gap-analysis said %s", exc.response.status_code)
-        raise HTTPException(503, "Can't work out your gaps right now (gap-analysis had a problem), please retry")
+        # Pass on gap-analysis's own explanation if it gave one (like "nutrient-calc is unavailable")
+        try:
+            detail = exc.response.json()["detail"]
+        except (ValueError, KeyError, TypeError):
+            detail = "Can't work out your gaps right now (gap-analysis had a problem), please retry"
+        raise HTTPException(503, detail)
     except httpx2.HTTPError as exc:
         log.warning("gap-analysis unavailable: %s", exc)
         raise HTTPException(503, "Can't work out your gaps right now (gap-analysis is unavailable), please retry")
@@ -70,6 +75,9 @@ def suggest_foods(
     foods = repo.candidate_foods(conn, list(shortfalls))
     result["suggestions"] = rules.recommend(foods, shortfalls, units, today["situation"], targets, energy_left, limit)
     result["notes"] = notes_for(today["situation"], shortfalls)
+    if not result["suggestions"]:
+        reason = rules.why_nothing_fits(foods, today["situation"], targets, energy_left)
+        result["notes"].insert(0, reason or "No everyday foods have enough of this to suggest.")
     return result
 
 

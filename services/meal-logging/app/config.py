@@ -10,6 +10,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 NUTRIENT_CALC_URL = os.getenv("NUTRIENT_CALC_URL", "http://localhost:8002")
 JWT_SECRET = os.getenv("JWT_SECRET", "")              # signs the tokens our services use with each other
 GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")  # the Google Cloud project whose logins we accept
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")        # the public Web API key the website logs in with
 APP_VERSION = os.getenv("APP_VERSION", "dev")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))

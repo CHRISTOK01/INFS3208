@@ -2,8 +2,9 @@
 
 MacroScope helps you find the nutrients your diet is missing. You log what you eat, and it shows
 your calories, protein, carbs, fat, fibre and over 20 vitamins and minerals against targets made
-for you (from your age, sex, size, activity, goal, diet, and pregnancy or breastfeeding). It spots the nutrients you're often short on over the last 7 and 14 days, and suggests
-foods that would help.
+for you (from your age, sex, size, activity, goal, diet, and pregnancy or breastfeeding). It spots
+the nutrients you're often short on over the last 7 and 14 days, and suggests everyday foods that
+would help.
 
 > MacroScope gives estimates from food composition data. It isn't medical advice.
 
@@ -11,30 +12,30 @@ It's made of four small services. Each runs in its own container with its own da
 
 | Service | What it does | Web address (through the gateway) |
 |---|---|---|
-| meal-logging | accounts, food search, logging meals | `/api/meals` |
-| nutrient-calc | adds up the nutrients in what you ate | `/api/nutrients` |
-| gap-analysis | your targets, and what you're short on | `/api/gaps` |
+| meal-logging | food search (cached in Redis), barcodes, logging meals, saved recipes | `/api/meals` |
+| nutrient-calc | adds up the nutrients in what you ate, keeps daily totals | `/api/nutrients` |
+| gap-analysis | your profile and targets, and what you're short on | `/api/gaps` |
 | food-recommender | suggests foods to fill the gaps | `/api/recommend` |
 
-Everything is reached through one gateway at **http://localhost:8080**, which sends each request to
-the right service. More detail on the design is in [docs/architecture.md](docs/architecture.md).
+The React website and the four services are all reached through one gateway at
+**http://localhost:8080**, which sends each request to the right place (on Kubernetes, the Ingress
+will do this job). The services talk to each other with plain REST calls; there are no message
+queues. More detail on the design is in [docs/architecture.md](docs/architecture.md).
 
-## Progress
+```
+browser ──► gateway :8080 ──┬─ /               ─► frontend (React, served by Nginx)
+                            ├─ /api/meals      ─► meal-logging     ─► meal-db + redis
+                            ├─ /api/nutrients  ─► nutrient-calc    ─► nutrient-db
+                            ├─ /api/gaps       ─► gap-analysis     ─► gap-db
+                            └─ /api/recommend  ─► food-recommender ─► recommender-db
+```
 
-- [x] Phase 1: project setup (Docker Compose, 4 databases, Redis, gateway)
-- [x] Phase 2: food data loaded: Australian (AUSNUT 2023) first, USDA as a fallback
-- [x] Phase 3a: nutrient-calc service
-- [x] Phase 3b: meal-logging service
-- [x] Phase 3c: gap-analysis service
-- [x] Phase 3d: food-recommender
-- [ ] Phase 4: React frontend and demo users
-- [ ] Phase 5: load test and failure test
-- [ ] Phase 6: final README
+Everything runs on your own computer with Docker Compose. Kubernetes files come next.
 
 ## What you need
 
 - **Docker Desktop.** It includes Docker Compose.
-- **Python 3.12 or newer.** You only need this to download the data. Everything else runs in Docker.
+- **Python 3.12 or newer.** You only need this to download the food data. Everything else runs in Docker.
 - **A Google Cloud project with Identity Platform turned on.** People sign up and log in through
   Google, even when the app runs on your own computer. See "Setting up Google login" below.
 
@@ -67,13 +68,22 @@ docker compose ps
 python etl/download_ausnut.py
 python etl/download_usda.py
 
-# 6. Load the food data into the databases (takes about 5 minutes, only needed once)
+# 6. Load the food data into the databases (takes about 6 minutes, only needed once)
 #   run   start a one-off container for the loader
 #   --rm  delete that container when it's finished
 docker compose run --rm etl
+
+# 7. Make the demo users, with 3 weeks of meals each (takes about a minute)
+#   -e TODAY=...           today's date where you are (the container's clock is on UTC)
+#   --entrypoint python    run this script instead of the loader
+docker compose run --rm -e TODAY=2026-10-17 --entrypoint python etl seed_demo_users.py
 ```
 
-That's it. The databases keep their data, so next time you only need `docker compose up -d`.
+In PowerShell you can fill in today's date for step 7 automatically:
+`docker compose run --rm -e TODAY=$(Get-Date -Format yyyy-MM-dd) --entrypoint python etl seed_demo_users.py`
+
+That's it. Open **http://localhost:8080**. The databases keep their data, so next time you only
+need `docker compose up -d`.
 
 ## Setting up Google login
 
@@ -84,10 +94,41 @@ You only need to do this once, in the Google Cloud console (https://console.clou
 2. Search for **Identity Platform** and click **Enable**. It's free for up to 50,000 users a month,
    but the project needs billing turned on.
 3. Under **Providers**, click **Add a provider**, choose **Email / Password**, turn it on and save.
-   (The "Sign in with Google" button gets set up with the website, in phase 4.)
-4. Click **Application setup details** (top right) and copy the `apiKey`. It goes into
-   `GOOGLE_API_KEY` in `.env`.
-5. Restart the services so they pick up the new settings: `docker compose up -d`.
+4. Optional, for the website's **Continue with Google** button: add the **Google** provider too.
+   Google fills in the details for you. Under **Settings > Security**, check `localhost` is in the
+   list of authorised domains (it is by default). Without this, the button says that way of
+   logging in isn't turned on, and email and password still work.
+5. Click **Application setup details** (top right) and copy the `apiKey`. It goes into
+   `GOOGLE_API_KEY` in `.env`. It isn't a secret: the website hands it to every browser.
+6. Restart the services so they pick up the new settings: `docker compose up -d`.
+
+## Using the website
+
+Go to **http://localhost:8080** and make an account, or log in as one of the demo users. They all
+have the password **`MacroScope-demo-2026`**:
+
+| Email | Who they are | What the app finds |
+|---|---|---|
+| `alex@macroscope-demo.test` | 29, office job, lots of white bread, rice and chicken | short on magnesium, fibre, vitamin C and more |
+| `priya@macroscope-demo.test` | 25, vegetarian, no legumes or fortified cereal | very short on iron (vegetarians need 1.8 times as much) |
+| `sam@macroscope-demo.test` | 35, trying to lose weight, no fish, eggs or mushrooms | short on vitamin D, iron and calcium |
+| `jess@macroscope-demo.test` | 32, 22 weeks pregnant, eats well | short on iron (27 mg a day in pregnancy) |
+
+The tabs:
+
+- **Dashboard**: today's energy and macros (and what's left), a chart of vitamins and minerals
+  against your targets, your limits (sodium, saturated fat, sugar, alcohol, caffeine), and the
+  nutrients you've been short on over the last 7 or 14 days.
+- **Log food**: search foods (choose raw or cooked first), or type a barcode. Pick a household
+  portion like "1 banana, medium", build up a meal and save it. Save meals as recipes and log them
+  again in one click. Each food says how complete its data is.
+- **Suggestions**: everyday foods that would fill your gaps, each with a sentence saying why, or
+  good sources of any one nutrient.
+- **My details**: your profile, including pregnancy and breastfeeding, and every target with where
+  it comes from.
+
+The date picker at the top lets you look back at (or log food for) an earlier day. The footer shows
+the version each service is running and which container answered the last request.
 
 ## Everyday commands
 
@@ -98,7 +139,7 @@ docker compose up -d
 # Stop everything. Your data is kept.
 docker compose down
 
-# Stop everything AND delete all the data. You'll need to do step 6 again afterwards.
+# Stop everything AND delete all the data. You'll need to do steps 6 and 7 again afterwards.
 #   -v  also delete the database storage
 docker compose down -v
 
@@ -122,13 +163,17 @@ Each service has a page in your browser where you can try out its API, for examp
 http://localhost:8080/api/nutrients/docs. Swap `nutrients` for `meals`, `gaps` or `recommend` to see
 the others.
 
-## What the finished services can do
+## The API
+
+`{user_id}` is your Google ID (`GET /api/meals/auth/me` shows it). People can only see their own
+data; our services can ask about anyone, using their own short-lived service token.
 
 **meal-logging** (`/api/meals/...`)
 
 | What | Endpoint | Login needed? |
 |---|---|---|
-| See who you're logged in as (signing up and logging in happen through Google) | `GET /auth/me` | yes |
+| The login settings the website needs (project and public API key) | `GET /auth/config` | no |
+| See who you're logged in as | `GET /auth/me` | yes |
 | Search foods by name (raw or cooked first if you ask) | `GET /foods/search?q=banana&state=raw` | no |
 | Look up a packaged food by barcode | `GET /foods/barcode/{code}` | no |
 | See a food and its household portions | `GET /foods/{fdc_id}` | no |
@@ -146,207 +191,188 @@ the others.
 | Add up the nutrients in a list of foods | `POST /calculate` | yes |
 | Save or read a user's daily totals | `PUT /daily/{user_id}/{date}`, `GET /daily/{user_id}?start&end` | yes |
 
-**gap-analysis** (`/api/gaps/...`). `{user_id}` is your Google ID (`GET /api/meals/auth/me` shows it).
+**gap-analysis** (`/api/gaps/...`)
 
 | What | Endpoint | Login needed? |
 |---|---|---|
 | The choices for the sign-up form (lifestyles with descriptions, goals, diets) | `GET /profile-options` | no |
 | Save your details, and see the targets they lead to | `PUT /profile/{user_id}` | yes |
 | See your details, or your targets for a day and where each number came from | `GET /profile/{user_id}`, `GET /targets/{user_id}?date=` | yes |
-| A day's intake against your targets, and the calories and macros you have left | `GET /today/{user_id}?date=2026-10-16` | yes |
-| Your gaps and excesses over the last 7 and 14 days | `GET /report/{user_id}?date=2026-10-16` | yes |
+| A day's intake against your targets, and the calories and macros you have left | `GET /today/{user_id}?date=2026-10-17` | yes |
+| Your gaps and excesses over the last 7 and 14 days | `GET /report/{user_id}?date=2026-10-17` | yes |
 
 **food-recommender** (`/api/recommend/...`)
 
 | What | Endpoint | Login needed? |
 |---|---|---|
-| Foods that would fill your gaps from the last 14 days, and fit the calories you have left today | `GET /foods/{user_id}?date=2026-10-16` | yes |
-| Good sources of one nutrient, gaps or not | `GET /foods/{user_id}?date=2026-10-16&nutrient=iron` | yes |
+| Foods that would fill your gaps from the last 14 days, and fit the calories you have left today | `GET /foods/{user_id}?date=2026-10-17` | yes |
+| Good sources of one nutrient, gaps or not | `GET /foods/{user_id}?date=2026-10-17&nutrient=iron` | yes |
 
-## Trying out meal-logging
+Every service also has `GET /health` (is it running?), `GET /ready` (can it reach its database?)
+and `GET /version`, both at the root and under its own path.
 
-First you need a login token from Google. Until the website exists (phase 4), you can get one
-straight from Google's sign-up API. In PowerShell:
+## Trying the API from PowerShell
+
+The website is the easy way in, but you can call the API directly too. First get a login token
+from Google:
 
 ```powershell
-# Read your Web API key from .env (Google's sign-up API needs it)
+# Read your Web API key from .env (Google's login API needs it)
 $KEY = (Select-String -Path .env -Pattern '^GOOGLE_API_KEY=(.*)').Matches[0].Groups[1].Value
 
-# Make an account with Google. The reply's "idToken" is your login token (it lasts an hour).
+# Log in as a demo user. The reply's "idToken" is your login token (it lasts an hour).
 #   -X POST   send a POST request
 #   -H        add a header (here, saying the body is JSON)
 #   -d        the request body
-curl.exe -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$KEY" -H "Content-Type: application/json" -d '{\"email\":\"me@example.com\",\"password\":\"password123\",\"returnSecureToken\":true}'
+$login = curl.exe -s -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$KEY" -H "Content-Type: application/json" -d '{\"email\":\"priya@macroscope-demo.test\",\"password\":\"MacroScope-demo-2026\",\"returnSecureToken\":true}' | ConvertFrom-Json
+$TOKEN = $login.idToken
+$MYID = $login.localId     # your Google ID
 
-# Already have an account? Log in instead (same reply, with a new idToken)
-curl.exe -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$KEY" -H "Content-Type: application/json" -d '{\"email\":\"me@example.com\",\"password\":\"password123\",\"returnSecureToken\":true}'
+# (To make a new account instead, use accounts:signUp in place of accounts:signInWithPassword.)
 ```
 
-Then the easiest way to try things is the API page in your browser,
-http://localhost:8080/api/meals/docs. Click **Authorize** at the top, paste the `idToken`, and use
-**Try it out** on any endpoint.
-
-Or from PowerShell:
+You can also paste the token into **Authorize** on any service's `/docs` page and use
+**Try it out**. Some things to try:
 
 ```powershell
 # Search for a food (no login needed). Run it twice: the X-Cache header goes from MISS to HIT.
 #   -i  show the headers as well as the reply
 curl.exe -i "http://localhost:8080/api/meals/foods/search?q=banana"
 
-# See a food's household portions, like "1 medium = 118 g"
-curl.exe http://localhost:8080/api/meals/foods/173944
+# See a food's household portions, like "1 banana, medium = 127 g"
+curl.exe http://localhost:8080/api/meals/foods/16502001
 
-# Look up a packaged food by its barcode
-curl.exe http://localhost:8080/api/meals/foods/barcode/20048556
-
-# Save your idToken so you don't have to paste it every time (put your own token in the quotes)
-$TOKEN = "paste-the-idToken-here"
-
-# Check it works: this says who you're logged in as
-curl.exe http://localhost:8080/api/meals/auth/me -H "Authorization: Bearer $TOKEN"
-
-# Log 100 g of raw spinach for lunch
-curl.exe -X POST http://localhost:8080/api/meals/meals -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{\"meal_date\":\"2026-10-15\",\"meal_type\":\"lunch\",\"items\":[{\"fdc_id\":168462,\"grams\":100}]}'
-
-# See that day's meals
-curl.exe "http://localhost:8080/api/meals/meals?start=2026-10-15" -H "Authorization: Bearer $TOKEN"
-```
-
-**What happens if nutrient-calc is down:**
-
-```powershell
-# Stop nutrient-calc
-docker compose stop nutrient-calc
-
-# Log a meal (same command as above). It still saves, but says "calc_status": "pending".
-
-# Start nutrient-calc again, wait about 10 seconds, then send the waiting days
-docker compose start nutrient-calc
-curl.exe -X POST http://localhost:8080/api/meals/meals/recalculate-pending -H "Authorization: Bearer $TOKEN"
-```
-
-## Trying out gap-analysis
-
-Carry on in the same PowerShell window as above, so `$TOKEN` is still set.
-
-```powershell
-# Save your Google ID in $MYID
-$MYID = (curl.exe -s http://localhost:8080/api/meals/auth/me -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json).user_id
-
-# See the choices for the profile (the lifestyles have a description each)
-(curl.exe -s http://localhost:8080/api/gaps/profile-options | ConvertFrom-Json).lifestyle
-
-# Save your details. The reply has your targets, how they were worked out, and any notes.
-#   -X PUT  send a PUT request (save or replace)
-#   lifestyle                   what a normal day looks like (see the choices above)
-#   exercise_sessions_per_week  how many times a week you do 30-60 minutes of sport or hard exercise
-#   goal                        lose, maintain or gain
-#   diet                        omnivore, vegetarian or vegan (optional)
-#   due_date, pre_pregnancy_weight_kg, breastfeeding   only if they apply (optional)
-$reply = curl.exe -s -X PUT "http://localhost:8080/api/gaps/profile/$MYID" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{\"sex\":\"female\",\"date_of_birth\":\"2001-05-20\",\"height_cm\":165,\"weight_kg\":60,\"lifestyle\":\"seated_some_walking\",\"exercise_sessions_per_week\":2,\"goal\":\"maintain\"}' | ConvertFrom-Json
-$reply.situation
-$reply.targets | Format-Table nutrient_key, target_amount, upper_limit, aim, unit, source
+# Log a medium banana (127 g) for a snack. Instead of "grams", you can give "portion_id" (one of
+# the portions from the reply above) and "quantity" (how many).
+curl.exe -X POST http://localhost:8080/api/meals/meals -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{\"meal_date\":\"2026-10-17\",\"meal_type\":\"snack\",\"items\":[{\"fdc_id\":16502001,\"grams\":127}]}'
 
 # How much energy and macros you have left today
 #   the ` before ? stops PowerShell treating the ? specially
-(curl.exe -s "http://localhost:8080/api/gaps/today/$MYID`?date=2026-10-16" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json).remaining
+(curl.exe -s "http://localhost:8080/api/gaps/today/$MYID`?date=2026-10-17" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json).remaining
 
-# Your gaps over the last 7 days (it looks at the full days BEFORE the date you give)
-$report = curl.exe -s "http://localhost:8080/api/gaps/report/$MYID`?date=2026-10-16" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
-$report.windows[0].top_gaps
-$report.windows[0].nutrients | Format-Table nutrient_key, avg_intake, unit, pct_of_target, status
-```
+# Your gaps over the last 14 days (it looks at the full days BEFORE the date you give)
+$report = curl.exe -s "http://localhost:8080/api/gaps/report/$MYID`?date=2026-10-17" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
+$report.windows[1].top_gaps
+$report.windows[1].nutrients | Format-Table nutrient_key, avg_intake, unit, pct_of_target, status
 
-The report needs at least 3 days with food logged before it can say anything. Until then every
-nutrient shows "unknown". The demo users in phase 4 will come with weeks of meals already logged.
-
-## Trying out food-recommender
-
-Same PowerShell window again, so `$TOKEN` and `$MYID` are still set.
-
-```powershell
-# Foods that would help fill your gaps. Each one says why, in plain words.
-#   date   your today (the gaps come from the 14 days before it)
-$rec = curl.exe -s "http://localhost:8080/api/recommend/foods/$MYID`?date=2026-10-16" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
-$rec.gaps | Format-Table nutrient_key, avg_intake, target_amount, shortfall, unit
-$rec.suggestions | Format-List name, why
-$rec.notes
-
-# Good sources of one nutrient, even if you're not short on it
-#   nutrient   any nutrient with a daily target, like iron, calcium, vitamin_d or fibre
-#   limit      how many foods to send back (1 to 20, 8 if you leave it out)
-$rec = curl.exe -s "http://localhost:8080/api/recommend/foods/$MYID`?date=2026-10-16&nutrient=iron&limit=5" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
+# Foods that would help fill them, each with a reason
+$rec = curl.exe -s "http://localhost:8080/api/recommend/foods/$MYID`?date=2026-10-17" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
 $rec.suggestions | Format-List name, why
 ```
-
-With no gaps yet (fewer than 3 days logged, or nothing short), `suggestions` is empty and `notes`
-says why.
 
 ## Running the tests
 
 ```bash
-# Run nutrient-calc's tests in a one-off container
-#   --rm  delete the container afterwards
-docker compose run --rm nutrient-calc pytest -v
-
-# Same again, but also run the tests that use the real database
-#   -e INTEGRATION=1  turn on the database tests
+# Run each service's tests in a one-off container. -e INTEGRATION=1 also runs the tests that use
+# the real databases and the other services, so the app needs to be running with the data loaded.
+#   --rm               delete the container afterwards
+#   -e INTEGRATION=1   turn on the integration tests (leave it out for just the quick ones)
 docker compose run --rm -e INTEGRATION=1 nutrient-calc pytest -v
-
-# meal-logging's tests. The INTEGRATION=1 ones need the food data loaded and nutrient-calc running.
-#   -e INTEGRATION=1  turn on the tests that use the real databases, Redis and nutrient-calc
 docker compose run --rm -e INTEGRATION=1 meal-logging pytest -v
-
-# gap-analysis's tests. The INTEGRATION=1 ones need the reference intakes loaded and nutrient-calc running.
 docker compose run --rm -e INTEGRATION=1 gap-analysis pytest -v
-
-# food-recommender's tests. The INTEGRATION=1 ones need the food data loaded, and gap-analysis
-# and nutrient-calc running.
 docker compose run --rm -e INTEGRATION=1 food-recommender pytest -v
 
-# Run the data loader's tests
+# The data loader's tests
 #   --entrypoint pytest  run pytest instead of the loader
 docker compose run --rm --entrypoint pytest etl -v tests
 ```
 
-## Demo: load balancing and failures
+## Demo: load balancing, load test and failures
+
+**Load balancing.** Run several copies of a service; the gateway shares requests between them.
 
 ```bash
-# Run 3 copies of nutrient-calc
-#   --scale nutrient-calc=3  how many copies to run
-docker compose up -d --scale nutrient-calc=3
+# Run 3 copies of meal-logging and 2 of nutrient-calc
+#   --scale <service>=<n>  how many copies of that service to run
+docker compose up -d --scale meal-logging=3 --scale nutrient-calc=2
 
-# Wait about 10 seconds, then run this a few times.
-# "served_by" changes, because the gateway shares requests between the copies.
-curl.exe http://localhost:8080/api/nutrients/version
-
-# Go back to one copy
-docker compose up -d --scale nutrient-calc=1
-
-# Stop nutrient-calc's database to pretend it has crashed
-docker compose stop nutrient-db
-
-# The service stays up (/health gives 200) but says it isn't ready (/ready gives 503)
-curl.exe -i http://localhost:8080/api/nutrients/health
-curl.exe -i http://localhost:8080/api/nutrients/ready
-
-# Start the database again. /ready goes back to 200 within a few seconds.
-docker compose start nutrient-db
+# Wait about 10 seconds (the gateway looks the copies up every 10 s), then run this a few
+# times. "served_by" changes from one copy to the next.
+curl.exe http://localhost:8080/api/meals/version
 ```
+
+The footer of the website shows the same thing: "Last answer: meal-logging, from `<container>`".
+
+**Load test.** 20 simulated people searching, logging meals and working out nutrients, as fast as
+they can. It ends with a table of how many requests worked, how fast they were, and which copies
+answered. It uses its own test account and cleans up its meals afterwards.
+
+```bash
+# Run the load test
+#   --users    how many people at once (default 20)
+#   --seconds  how long to keep going (default 60)
+docker compose run --rm loadtest --users 20 --seconds 60
+```
+
+On a laptop with the copies above, this did about 115 requests a second with no failures, split
+evenly (633 / 603 / 598 requests across the three meal-logging copies). The command doesn't restart
+the app, so it keeps the extra copies you started.
+
+**Failure tests.** Stop things while the app is in use and watch it cope. These are the results
+from running them:
+
+```bash
+# 1. A copy crashes in the middle of the load test. Start the load test in one terminal, and
+#    while it's running, kill one copy from another terminal:
+docker compose run --rm loadtest --users 20 --seconds 30
+docker kill macroscope-meal-logging-2
+#    Result: 3,505 of 3,510 requests still worked. The 5 that failed were meals being saved on
+#    that copy at the moment it died. The gateway doesn't resend those, because sending a save
+#    twice could log the meal twice. Searches and other reads were retried on the other copies.
+
+# 2. nutrient-calc goes down completely
+docker compose stop nutrient-calc
+#    Result: on the website you can still search and log meals. They're saved and marked
+#    "totals pending". The dashboard shows the last saved 14-day report, marked as out of date,
+#    and says today's totals can't be worked out right now. Suggestions say the same.
+docker compose start nutrient-calc
+#    Then click "Update my totals" on the Log food page (or POST /api/meals/meals/recalculate-pending)
+#    and everything catches up.
+
+# 3. A database goes down
+docker compose stop recommender-db
+#    Result: only the Suggestions tab is affected. It says "Database unavailable, please retry
+#    shortly". food-recommender stays running (/health gives 200) but /ready gives 503, which is
+#    how Kubernetes will know to stop sending it requests.
+curl.exe -i http://localhost:8080/api/recommend/ready
+docker compose start recommender-db
+#    Within a few seconds it's back to normal.
+```
+
+## Working on the website
+
+The website is in `frontend/` (React and Vite, with Chart.js for the charts and Google's Firebase
+library for logging in). All its colours and sizes are set once at the top of `src/styles.css`,
+which also switches to dark mode when your computer is in dark mode. It's built into plain files
+and served by its own small Nginx container.
+To change it with instant reloading instead of rebuilding the container each time:
+
+```bash
+# Install the packages (only needed once)
+#   --prefix frontend  run in the frontend folder
+npm install --prefix frontend
+
+# Start Vite's development server on http://localhost:5173. It passes /api calls on to the
+# gateway, so the rest of the app needs to be running in Docker.
+npm run dev --prefix frontend
+```
+
+When you're happy, `docker compose up --build -d frontend` puts the new version into the container.
 
 ## The data
 
 The main food data is Australian: AUSNUT 2023 from Food Standards Australia New Zealand (3,741
 foods with complete nutrient data, CC BY 4.0). USDA FoodData Central (public domain) fills in
-everything else, including packaged foods with barcodes. The files are too big for git, so the
-repo has scripts to download them instead.
+everything else, including packaged foods with barcodes. Targets come from the Australian NHMRC
+Nutrient Reference Values. The files are too big for git, so the repo has scripts to download them.
 
 The last load put **1,030,440 rows** into the databases, including 47,334 foods and 864,594
 nutrient values. The full counts, and how the data is cleaned, are in [etl/README.md](etl/README.md).
 
-To look inside a database:
-
 ```bash
+# Print the row counts again
+docker compose run --rm etl --counts-only
+
 # Open a SQL prompt in nutrient-calc's database (type \q to leave)
 #   exec            run a command in a container that's already running
 #   -U nutrient     log in as the "nutrient" user
@@ -358,11 +384,11 @@ docker compose exec nutrient-db psql -U nutrient -d nutrient_db
 
 ```
 docker-compose.yml   runs the whole app on your computer
-gateway/nginx.conf   sends each /api/... request to the right service
+gateway/nginx.conf   sends /api/... to the right service, and everything else to the website
+frontend/            the React website, and the Nginx that serves it
 services/<name>/     one folder per service: code (app/), tests, database setup (db/init.sql)
-etl/                 downloads and loads the USDA data
-frontend/            the React app (phase 4)
-loadtest/            load test (phase 5)
-k8s/                 Kubernetes files (later)
+etl/                 downloads and loads the food data; seed_demo_users.py makes the demo users
+loadtest/            the load test
+k8s/                 Kubernetes files (next)
 docs/                design notes
 ```

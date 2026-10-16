@@ -11,6 +11,7 @@ How it works:
   3. Foods are skipped if they don't suit the person: meat and fish for vegetarians (and eggs and
      dairy for vegans), foods FSANZ says to avoid in pregnancy, anything that would take them over
      a limit today (like sodium or caffeine), and anything with more energy than they have left.
+     Someone who's already over a limit can still have foods with only a little of it.
   4. Each food is scored on one standard serve: for each gap, how much of the daily shortfall the
      serve makes up (at most 100%), added together. So a food that covers two gaps beats one that
      covers one, and nothing gets extra credit for going way past what's needed.
@@ -18,6 +19,7 @@ How it works:
      and no more than three from each food group.
 """
 import re
+from collections import Counter
 
 # The five food groups. An AUSNUT dietary guidelines code starts with the group's number,
 # e.g. 301 "Fresh/canned fruit" or 5011 "Unprocessed meat".
@@ -95,6 +97,11 @@ MAX_PER_GROUP = 3
 # If someone has already eaten their energy for the day, we still show foods up to this many kcal
 # (most fruit and vegetables), rather than nothing at all
 MIN_ENERGY_BUDGET_KCAL = 150
+# A serve can't take today's total over a limit. But once someone is already over (a salty lunch,
+# say), nearly every food has a little sodium, so that rule would leave nothing at all. So a serve
+# with no more than this share of the daily limit is always allowed: plain fruit and vegetables, not
+# salty ones. A limit of 0 (like alcohol in pregnancy) still allows none.
+LIMIT_ALLOWANCE = 0.10
 
 NAMES = {
     "fibre": "fibre", "calcium": "calcium", "iodine": "iodine", "iron": "iron", "magnesium": "magnesium",
@@ -195,7 +202,8 @@ def why_not(food: dict, situation: dict, today: dict[str, dict], energy_budget: 
             # The upper limit is for retinol, which only comes from animal foods. Plant foods have
             # beta-carotene instead, which has no upper limit.
             continue
-        if (row.get("amount") or 0) + per_100g * grams / 100 > limit:
+        allowed = max(limit - (row.get("amount") or 0), LIMIT_ALLOWANCE * limit)
+        if per_100g * grams / 100 > allowed:
             return f"would take you over your limit for {nice_name(key)} today"
     return None
 
@@ -250,10 +258,29 @@ def explain(food: dict, covers: list[dict], units: dict[str, str]) -> str:
     return f"A standard serve ({STANDARD_SERVES[food['adg_code']]} g) gives {listed}{energy}."
 
 
+def energy_budget(energy_left: float | None) -> float:
+    """How many kcal one serve may have: what's left today, but never less than 150."""
+    return max(energy_left, MIN_ENERGY_BUDGET_KCAL) if energy_left is not None else float("inf")
+
+
+def why_nothing_fits(foods: list[dict], situation: dict, today: dict[str, dict], energy_left: float | None) -> str | None:
+    """When nothing gets suggested, a sentence giving the most common reason that's about today
+    (energy or a limit), so the website can say something more useful than "no foods fit"."""
+    reasons = Counter(why_not(f, situation, today, energy_budget(energy_left)) for f in foods)
+    about_today = [(count, reason) for reason, count in reasons.items() if reason and reason.endswith("today")]
+    if not about_today:
+        return None
+    reason = max(about_today)[1]
+    if reason.startswith("more energy"):
+        return "Nothing fits today: you've used up today's energy. Check back tomorrow."
+    return f"Nothing fits today: most foods {reason}. Check back tomorrow."
+
+
+
 def recommend(foods: list[dict], shortfalls: dict[str, float], units: dict[str, str],
               situation: dict, today: dict[str, dict], energy_left: float | None, limit: int) -> list[dict]:
     """Pick the best `limit` foods for these shortfalls (see the top of this file for the rules)."""
-    budget = max(energy_left, MIN_ENERGY_BUDGET_KCAL) if energy_left is not None else float("inf")
+    budget = energy_budget(energy_left)
     scored = []
     for food in foods:
         if why_not(food, situation, today, budget):

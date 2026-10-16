@@ -26,3 +26,11 @@ def test_health_and_version_also_work_under_the_gateway_prefix():
 def test_ready_reports_503_when_database_is_unavailable():
     response = client.get("/ready")
     assert response.status_code == 503
+
+
+def test_login_config_is_public_and_names_the_project():
+    from app import config
+    body = client.get("/api/meals/auth/config").json()      # no login token needed
+    assert body["project_id"] == config.GOOGLE_PROJECT_ID
+    assert body["auth_domain"] == f"{config.GOOGLE_PROJECT_ID}.firebaseapp.com"
+    assert body["api_key"] == config.GOOGLE_API_KEY
