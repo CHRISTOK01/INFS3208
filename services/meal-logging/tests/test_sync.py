@@ -44,20 +44,20 @@ def nutrient_calc_down(monkeypatch):
 def test_day_is_marked_done_when_nutrient_calc_answers(monkeypatch):
     done = fake_repo(monkeypatch)
     sent = nutrient_calc_up(monkeypatch)
-    assert sync.sync_day(FakeConn(), 7, DAY) is True
-    assert sent == [(7, DAY, [{"fdc_id": 1, "grams": 100}])]   # the whole day was sent
-    assert done == [(7, DAY)]
+    assert sync.sync_day(FakeConn(), "user-7", DAY) is True
+    assert sent == [("user-7", DAY, [{"fdc_id": 1, "grams": 100}])]   # the whole day was sent
+    assert done == [("user-7", DAY)]
 
 
 def test_day_stays_pending_when_nutrient_calc_is_down(monkeypatch):
     done = fake_repo(monkeypatch)
     nutrient_calc_down(monkeypatch)
-    assert sync.sync_day(FakeConn(), 7, DAY) is False
+    assert sync.sync_day(FakeConn(), "user-7", DAY) is False
     assert done == []
 
 
 def test_recalculate_sends_every_pending_day(monkeypatch):
-    days = [{"user_id": 7, "meal_date": date(2026, 3, d)} for d in (1, 2, 3)]
+    days = [{"user_id": "user-7", "meal_date": date(2026, 3, d)} for d in (1, 2, 3)]
     done = fake_repo(monkeypatch, days)
     nutrient_calc_up(monkeypatch)
     assert sync.recalculate_pending(FakeConn(), None) == {"sent": 3, "still_pending": 0}
@@ -65,7 +65,7 @@ def test_recalculate_sends_every_pending_day(monkeypatch):
 
 
 def test_recalculate_stops_at_the_first_failure(monkeypatch):
-    days = [{"user_id": 7, "meal_date": date(2026, 3, d)} for d in (1, 2, 3)]
+    days = [{"user_id": "user-7", "meal_date": date(2026, 3, d)} for d in (1, 2, 3)]
     fake_repo(monkeypatch, days)
     nutrient_calc_down(monkeypatch)
     assert sync.recalculate_pending(FakeConn(), None) == {"sent": 0, "still_pending": 3}

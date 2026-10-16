@@ -2,8 +2,9 @@
 nutrient-calc. They're skipped unless INTEGRATION=1 is set, and the stack must be running:
     docker compose run --rm -e INTEGRATION=1 meal-logging pytest -v
 
-They create a throwaway user with a random email, log meals on dates in 2001 (so they can't clash
-with real data), and delete everything again at the end.
+They log in as a made-up user with a random Google ID (using the fake Google tokens from
+conftest.py), log meals on dates in 2001 so they can't clash with real data, and delete everything
+again at the end.
 """
 import os
 import uuid
@@ -13,15 +14,15 @@ import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, db
+from app import auth, config, db
 from app.main import app
+from tests.conftest import FakeGoogleKeys, make_service_token, make_user_token
 
 pytestmark = pytest.mark.skipif(os.getenv("INTEGRATION") != "1", reason="set INTEGRATION=1 to run")
 
 SPINACH, BANANA = 168462, 173944   # real USDA foods: "Spinach, raw" and "Bananas, raw"
 DAY = date(2001, 1, 10)
 OTHER_DAY = date(2001, 1, 11)
-PASSWORD = "integration-test-pw"
 
 
 @pytest.fixture(scope="module")
@@ -31,44 +32,38 @@ def client():
         yield c
 
 
+def login_headers(uid: str) -> dict:
+    return {"Authorization": f"Bearer {make_user_token(uid)}"}
+
+
 @pytest.fixture(scope="module")
 def user(client):
-    """Register a throwaway user, and clean up after all the tests have run."""
-    email = f"it-{uuid.uuid4().hex[:10]}@example.com"
-    reply = client.post("/api/meals/auth/register", json={"email": email, "password": PASSWORD}).json()
-    headers = {"Authorization": f"Bearer {reply['token']}"}
-    yield {"id": reply["user"]["id"], "email": email, "headers": headers}
+    """A made-up user. Their meals are deleted after all the tests have run."""
+    uid = f"it-{uuid.uuid4().hex[:12]}"
+    headers = login_headers(uid)
+    yield {"id": uid, "headers": headers}
 
-    # Delete the meals through the API, so nutrient-calc removes those days too
-    meals = client.get(f"/api/meals/meals?start=2001-01-01&end=2001-01-31", headers=headers).json()
-    for meal in meals:
-        client.delete(f"/api/meals/meals/{meal['id']}", headers=headers)
+    # Delete the meals through the API, so nutrient-calc removes those days too. This runs after
+    # the last test, when the fake Google keys from conftest.py are already switched off, so we
+    # switch them on again just for the clean-up.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(auth, "google_keys", FakeGoogleKeys())
+        meals = client.get("/api/meals/meals?start=2001-01-01&end=2001-01-31", headers=headers).json()
+        for meal in meals:
+            client.delete(f"/api/meals/meals/{meal['id']}", headers=headers)
     with db.pool.connection() as conn:
-        conn.execute("DELETE FROM users WHERE id = %s", (reply["user"]["id"],))
+        conn.execute("DELETE FROM saved_recipes WHERE user_id = %s", (uid,))
 
 
 def nutrient_calc_day(user, day):
-    """Ask nutrient-calc directly for this user's totals on one day."""
+    """Ask nutrient-calc directly for this user's totals on one day.
+
+    The real nutrient-calc can't check our fake Google tokens, so we ask as a service instead."""
     reply = httpx2.get(
         f"{config.NUTRIENT_CALC_URL}/api/nutrients/daily/{user['id']}?start={day}&end={day}",
-        headers=user["headers"],
+        headers={"Authorization": f"Bearer {make_service_token()}"},
     ).json()
     return reply["days"][0]["nutrients"] if reply["days"] else None
-
-
-# ---------------------------------------------------------------- accounts
-
-def test_register_and_login(client, user):
-    assert client.get("/api/meals/auth/me", headers=user["headers"]).json()["email"] == user["email"]
-
-    again = client.post("/api/meals/auth/register", json={"email": user["email"], "password": PASSWORD})
-    assert again.status_code == 409
-
-    ok = client.post("/api/meals/auth/login", json={"email": user["email"].upper(), "password": PASSWORD})
-    assert ok.status_code == 200 and ok.json()["token"]
-
-    wrong = client.post("/api/meals/auth/login", json={"email": user["email"], "password": "not-the-password"})
-    assert wrong.status_code == 401
 
 
 # ---------------------------------------------------------------- foods
@@ -130,14 +125,15 @@ def test_log_meal_with_grams_and_a_portion(client, user):
 
 
 def test_meal_is_saved_as_pending_when_nutrient_calc_is_down(client, user, monkeypatch):
-    # Point meal-logging at a port where nothing is listening, as if nutrient-calc had crashed
-    monkeypatch.setattr(config, "NUTRIENT_CALC_URL", "http://nutrient-calc:1")
-    reply = client.post("/api/meals/meals", headers=user["headers"], json={
-        "meal_date": str(OTHER_DAY), "meal_type": "lunch", "items": [{"fdc_id": SPINACH, "grams": 200}],
-    })
+    # Point meal-logging at a port where nothing is listening, as if nutrient-calc had crashed.
+    # The change only lasts until the end of the `with` block, then nutrient-calc is "back".
+    with monkeypatch.context() as patch:
+        patch.setattr(config, "NUTRIENT_CALC_URL", "http://nutrient-calc:1")
+        reply = client.post("/api/meals/meals", headers=user["headers"], json={
+            "meal_date": str(OTHER_DAY), "meal_type": "lunch", "items": [{"fdc_id": SPINACH, "grams": 200}],
+        })
     assert reply.status_code == 201                    # the meal is still saved
     assert reply.json()["calc_status"] == "pending"
-    monkeypatch.undo()                                 # nutrient-calc is "back"
 
     assert nutrient_calc_day(user, OTHER_DAY) is None  # it never heard about this day
     caught_up = client.post("/api/meals/meals/recalculate-pending", headers=user["headers"]).json()
@@ -162,16 +158,10 @@ def test_add_and_delete_items(client, user):
 
 
 def test_people_cannot_see_each_others_meals(client, user):
-    stranger = client.post("/api/meals/auth/register", json={
-        "email": f"it-{uuid.uuid4().hex[:10]}@example.com", "password": PASSWORD}).json()
-    try:
-        meal = client.get(f"/api/meals/meals?start={DAY}", headers=user["headers"]).json()[0]
-        theirs = {"Authorization": f"Bearer {stranger['token']}"}
-        assert client.get(f"/api/meals/meals/{meal['id']}", headers=theirs).status_code == 404
-        assert client.delete(f"/api/meals/meals/{meal['id']}", headers=theirs).status_code == 404
-    finally:
-        with db.pool.connection() as conn:
-            conn.execute("DELETE FROM users WHERE id = %s", (stranger["user"]["id"],))
+    meal = client.get(f"/api/meals/meals?start={DAY}", headers=user["headers"]).json()[0]
+    stranger = login_headers(f"it-{uuid.uuid4().hex[:12]}")
+    assert client.get(f"/api/meals/meals/{meal['id']}", headers=stranger).status_code == 404
+    assert client.delete(f"/api/meals/meals/{meal['id']}", headers=stranger).status_code == 404
 
 
 def test_deleting_the_last_meal_clears_the_day_in_nutrient_calc(client, user):

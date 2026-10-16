@@ -80,7 +80,7 @@ def prepare_items(conn: Connection, items: list[ItemIn]) -> list[dict]:
     return prepared
 
 
-def commit_and_sync(conn: Connection, user_id: int, day: date) -> bool:
+def commit_and_sync(conn: Connection, user_id: str, day: date) -> bool:
     """Finish a change to a day: put the day on the pending list, save everything, then send
     the day to nutrient-calc. Call repo.lock_day() BEFORE making the change.
 
@@ -102,14 +102,14 @@ def meals_reply(conn: Connection, meals: list[dict]) -> list[dict]:
     return replies
 
 
-def get_own_meal(conn: Connection, user_id: int, meal_id: int) -> dict:
+def get_own_meal(conn: Connection, user_id: str, meal_id: int) -> dict:
     meal = repo.get_meal(conn, user_id, meal_id)
     if meal is None:
         raise HTTPException(404, f"Meal {meal_id} not found")
     return meal
 
 
-def save_meal(conn: Connection, user_id: int, meal_date: date, meal_type: str, items: list[dict]) -> dict:
+def save_meal(conn: Connection, user_id: str, meal_date: date, meal_type: str, items: list[dict]) -> dict:
     """Save a new meal and send its day to nutrient-calc. Used by POST /meals and by recipes."""
     repo.lock_day(conn, user_id, meal_date)
     meal_id = repo.create_meal(conn, user_id, meal_date, meal_type)
@@ -121,7 +121,7 @@ def save_meal(conn: Connection, user_id: int, meal_date: date, meal_type: str, i
 # ---------------------------------------------------------------- endpoints
 
 @router.post("", status_code=201)
-def create_meal(body: MealIn, user_id: int = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)):
+def create_meal(body: MealIn, user_id: str = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)):
     """Log a meal. Each item is given in grams, or as a household portion that we turn into grams."""
     items = prepare_items(conn, body.items)
     return save_meal(conn, user_id, body.meal_date, body.meal_type, items)
@@ -131,7 +131,7 @@ def create_meal(body: MealIn, user_id: int = Depends(auth.current_user_id), conn
 def list_meals(
     start: date,
     end: date | None = None,
-    user_id: int = Depends(auth.current_user_id),
+    user_id: str = Depends(auth.current_user_id),
     conn: Connection = Depends(get_conn),
 ):
     """Your meals from start to end (or just on start, if there's no end)."""
@@ -149,18 +149,18 @@ def recalculate_pending(claims: dict = Depends(auth.current_claims), conn: Conne
 
     A user catches up their own days. Our own services (role "service") catch up everyone's.
     """
-    user_id = None if claims.get("role") == "service" else int(claims["sub"])
+    user_id = None if claims.get("role") == "service" else claims["sub"]
     return sync.recalculate_pending(conn, user_id)
 
 
 @router.get("/{meal_id}")
-def get_meal(meal_id: int, user_id: int = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)):
+def get_meal(meal_id: int, user_id: str = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)):
     return meals_reply(conn, [get_own_meal(conn, user_id, meal_id)])[0]
 
 
 @router.post("/{meal_id}/items", status_code=201)
 def add_items(
-    meal_id: int, body: ItemsIn, user_id: int = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)
+    meal_id: int, body: ItemsIn, user_id: str = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)
 ):
     """Add more food to a meal you've already logged."""
     meal = get_own_meal(conn, user_id, meal_id)
@@ -172,7 +172,7 @@ def add_items(
 
 
 @router.delete("/{meal_id}")
-def delete_meal(meal_id: int, user_id: int = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)):
+def delete_meal(meal_id: int, user_id: str = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)):
     """Delete a whole meal and everything in it."""
     meal = get_own_meal(conn, user_id, meal_id)
     repo.lock_day(conn, user_id, meal["meal_date"])
@@ -183,7 +183,7 @@ def delete_meal(meal_id: int, user_id: int = Depends(auth.current_user_id), conn
 
 @router.delete("/{meal_id}/items/{item_id}")
 def delete_item(
-    meal_id: int, item_id: int, user_id: int = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)
+    meal_id: int, item_id: int, user_id: str = Depends(auth.current_user_id), conn: Connection = Depends(get_conn)
 ):
     """Take one food out of a meal."""
     meal = get_own_meal(conn, user_id, meal_id)

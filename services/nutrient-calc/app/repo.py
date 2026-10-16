@@ -26,7 +26,7 @@ def get_food_nutrients(conn: Connection, fdc_ids: list[int]) -> dict[int, dict[i
     return result
 
 
-def upsert_daily_totals(conn: Connection, user_id: int, day: date, totals: dict[int, dict], item_count: int):
+def upsert_daily_totals(conn: Connection, user_id: str, day: date, totals: dict[int, dict], item_count: int):
     """Save the totals for one user and day, one row per nutrient, replacing what was there before.
 
     We use an "upsert" (insert, or update if the row already exists) rather than deleting and
@@ -52,7 +52,7 @@ def upsert_daily_totals(conn: Connection, user_id: int, day: date, totals: dict[
         )
 
 
-def delete_daily_totals(conn: Connection, user_id: int, day: date):
+def delete_daily_totals(conn: Connection, user_id: str, day: date):
     """Nothing is logged for that day any more, so remove its rows.
 
     An empty day means "no data", not "ate nothing".
@@ -60,7 +60,7 @@ def delete_daily_totals(conn: Connection, user_id: int, day: date):
     conn.execute("DELETE FROM daily_totals WHERE user_id = %s AND date = %s", (user_id, day))
 
 
-def get_daily_totals(conn: Connection, user_id: int, start: date, end: date) -> list[dict]:
+def get_daily_totals(conn: Connection, user_id: str, start: date, end: date) -> list[dict]:
     """Get every day from start to end that has food logged.
 
     Each day comes back as {"date", "item_count", "nutrients": {key: {...}}}.

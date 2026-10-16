@@ -3,7 +3,7 @@
 -- Nutrients are referred to by their short key (like 'magnesium'), the same as in nutrient-calc.
 
 CREATE TABLE user_profiles (
-    user_id         BIGINT PRIMARY KEY,           -- the user's id from meal-logging (the "sub" in their token)
+    user_id         TEXT PRIMARY KEY,             -- the user's Google ID (the "sub" in their login token)
     sex             TEXT NOT NULL CHECK (sex IN ('male', 'female')),
     age_years       SMALLINT NOT NULL CHECK (age_years BETWEEN 14 AND 120),
     weight_kg       NUMERIC(5, 1) NOT NULL CHECK (weight_kg > 0),
@@ -16,7 +16,7 @@ CREATE TABLE user_profiles (
 
 -- Each user's daily targets. Worked out again whenever they change their profile.
 CREATE TABLE targets (
-    user_id        BIGINT NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    user_id        TEXT   NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
     nutrient_key   TEXT   NOT NULL,
     target_amount  NUMERIC(12, 4),          -- NULL if we don't have a reference value yet
     upper_limit    NUMERIC(12, 4),          -- NULL if there's no upper limit
@@ -44,7 +44,7 @@ CREATE TABLE reference_intakes (
 
 -- The most recent gap check for each user, time window (7 or 14 days) and nutrient.
 CREATE TABLE gap_results (
-    user_id         BIGINT   NOT NULL,
+    user_id         TEXT     NOT NULL,
     window_days     SMALLINT NOT NULL CHECK (window_days IN (7, 14)),
     nutrient_key    TEXT     NOT NULL,
     avg_intake      NUMERIC(14, 4),          -- average over the days that actually have data

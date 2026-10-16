@@ -29,6 +29,8 @@ needs it, it asks through the API rather than reading the database directly.
 `fdc_id`, and nutrients by a short name such as `magnesium`. A few columns (like food names) are
 copied into more than one database on purpose, so no service has to reach into another's tables.
 
+**Logins are handled by Google, not by us.** See "Logging in" below.
+
 **Each service answers on its own path, like `/api/nutrients/...`.** The GKE Ingress doesn't
 rewrite paths, so our local gateway doesn't either. That way the URLs are the same on a laptop and
 in the cloud.
@@ -92,19 +94,34 @@ Compose and on Kubernetes, where the settings will come from a ConfigMap and a S
 
 ## Logging in (auth)
 
-meal-logging hands out JWTs (JSON Web Tokens), signed with the shared `JWT_SECRET`. The secret has
-to be at least 32 characters, and every service gets it from its environment.
+People sign up and log in through **Google Cloud Identity Platform**, on the website. Google
+checks their password (or their Google account), and gives the browser a login token signed with
+Google's private key. The website sends that token with every request, and every service checks it
+using Google's public keys. We never see or store anyone's password, and there's no users table.
 
-A token says three things about whoever holds it:
+A service only accepts a Google token if:
 
-- `sub`: the user's ID, as a string
-- `exp`: when the token stops working
-- `role`: either `user` (a person) or `service` (one of our services acting behind the scenes)
+- Google really signed it (checked with Google's public keys, which we download and keep for an hour)
+- it was made for **our** project (`GOOGLE_PROJECT_ID`), not some other app that uses Google login
+- it hasn't expired (Google's tokens last an hour, and the website quietly gets a new one)
 
-People can only see and change their own data. A `service` token is allowed to act for any user.
-meal-logging makes a short-lived (60 second) one every time it sends a day's food to nutrient-calc.
+The token's `sub` is the person's Google ID (a string like `"Xy7kP2..."`). Every service stores
+people's data under that ID, so the `user_id` columns are text.
 
-Passwords are stored as bcrypt hashes, never as the password itself.
+**Our services also need to talk to each other**, for example meal-logging sending a day's food
+to nutrient-calc. No person is involved there, so meal-logging makes its own short-lived (60
+second) token, signed with the shared `JWT_SECRET` and marked `role: service`. A service token can
+act for any user. To stop the shared secret being used to pretend to be a person, a token signed
+with it only counts if it says `role: service`.
+
+The two are easy to tell apart: Google's tokens use RS256 (a private key only Google has), and
+ours use HS256 (the shared secret).
+
+People can only see and change their own data. If Google's keys can't be downloaded, requests that
+need a login get a 503 ("can't check logins right now") rather than a confusing 401.
+
+**On Kubernetes**, `JWT_SECRET` goes into a Kubernetes Secret and `GOOGLE_PROJECT_ID` into a
+ConfigMap. The code doesn't change.
 
 ## meal-logging: keeping nutrient-calc up to date
 

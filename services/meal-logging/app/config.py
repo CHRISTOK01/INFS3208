@@ -8,11 +8,11 @@ API_PREFIX = "/api/meals"  # the gateway (and later the Ingress) sends this path
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://meal:meal_pw@localhost:5433/meal_db")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 NUTRIENT_CALC_URL = os.getenv("NUTRIENT_CALC_URL", "http://localhost:8002")
-JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_SECRET = os.getenv("JWT_SECRET", "")              # signs the tokens our services use with each other
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")  # the Google Cloud project whose logins we accept
 APP_VERSION = os.getenv("APP_VERSION", "dev")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
 
-TOKEN_HOURS = int(os.getenv("TOKEN_HOURS", "24"))                 # how long a login lasts
 SEARCH_CACHE_SECONDS = int(os.getenv("SEARCH_CACHE_SECONDS", "3600"))  # how long search results stay in Redis
 NUTRIENT_CALC_TIMEOUT = float(os.getenv("NUTRIENT_CALC_TIMEOUT", "3"))  # seconds to wait for nutrient-calc

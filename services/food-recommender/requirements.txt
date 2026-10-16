@@ -4,6 +4,8 @@ uvicorn[standard]==0.54.0
 psycopg[binary]==3.3.6
 psycopg-pool==3.3.3
 pyjwt==2.15.1
+# Lets PyJWT check Google's RS256 login tokens
+cryptography==50.0.2
 
 # For the tests. They're kept in the image so `docker compose run --rm food-recommender pytest` works.
 pytest==9.1.1

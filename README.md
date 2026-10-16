@@ -34,6 +34,8 @@ the right service. More detail on the design is in [docs/architecture.md](docs/a
 
 - **Docker Desktop.** It includes Docker Compose.
 - **Python 3.12 or newer.** You only need this to download the data. Everything else runs in Docker.
+- **A Google Cloud project with Identity Platform turned on.** People sign up and log in through
+  Google, even when the app runs on your own computer. See "Setting up Google login" below.
 
 On Windows PowerShell, type `curl.exe`, not `curl`. Plain `curl` in PowerShell is a different
 command.
@@ -46,7 +48,9 @@ Run these from the project folder, in order.
 # 1. Make your settings file from the template
 cp .env.example .env
 
-# 2. Make a random secret, then paste it into JWT_SECRET in the .env file
+# 2. Make a random secret, then paste it into JWT_SECRET in the .env file.
+#    Also put your Google project ID and Web API key into GOOGLE_PROJECT_ID and GOOGLE_API_KEY
+#    (see "Setting up Google login" below).
 python -c "import secrets; print(secrets.token_hex(32))"
 
 # 3. Build and start everything
@@ -67,6 +71,20 @@ docker compose run --rm etl
 ```
 
 That's it. The databases keep their data, so next time you only need `docker compose up -d`.
+
+## Setting up Google login
+
+You only need to do this once, in the Google Cloud console (https://console.cloud.google.com).
+
+1. Pick your project at the top of the page. Its **project ID** (e.g. `macroscope-123456`) goes
+   into `GOOGLE_PROJECT_ID` in `.env`.
+2. Search for **Identity Platform** and click **Enable**. It's free for up to 50,000 users a month,
+   but the project needs billing turned on.
+3. Under **Providers**, click **Add a provider**, choose **Email / Password**, turn it on and save.
+   (The "Sign in with Google" button gets set up with the website, in phase 4.)
+4. Click **Application setup details** (top right) and copy the `apiKey`. It goes into
+   `GOOGLE_API_KEY` in `.env`.
+5. Restart the services so they pick up the new settings: `docker compose up -d`.
 
 ## Everyday commands
 
@@ -107,7 +125,7 @@ the others.
 
 | What | Endpoint | Login needed? |
 |---|---|---|
-| Make an account, log in, see who you are | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | only for `/me` |
+| See who you're logged in as (signing up and logging in happen through Google) | `GET /auth/me` | yes |
 | Search foods by name (raw or cooked first if you ask) | `GET /foods/search?q=banana&state=raw` | no |
 | Look up a packaged food by barcode | `GET /foods/barcode/{code}` | no |
 | See a food and its household portions | `GET /foods/{fdc_id}` | no |
@@ -127,9 +145,26 @@ the others.
 
 ## Trying out meal-logging
 
-The easiest way is the API page in your browser: http://localhost:8080/api/meals/docs. Register,
-copy the `token` from the reply, click **Authorize** at the top and paste it in. Then you can try
-any endpoint with **Try it out**.
+First you need a login token from Google. Until the website exists (phase 4), you can get one
+straight from Google's sign-up API. In PowerShell:
+
+```powershell
+# Read your Web API key from .env (Google's sign-up API needs it)
+$KEY = (Select-String -Path .env -Pattern '^GOOGLE_API_KEY=(.*)').Matches[0].Groups[1].Value
+
+# Make an account with Google. The reply's "idToken" is your login token (it lasts an hour).
+#   -X POST   send a POST request
+#   -H        add a header (here, saying the body is JSON)
+#   -d        the request body
+curl.exe -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$KEY" -H "Content-Type: application/json" -d '{\"email\":\"me@example.com\",\"password\":\"password123\",\"returnSecureToken\":true}'
+
+# Already have an account? Log in instead (same reply, with a new idToken)
+curl.exe -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$KEY" -H "Content-Type: application/json" -d '{\"email\":\"me@example.com\",\"password\":\"password123\",\"returnSecureToken\":true}'
+```
+
+Then the easiest way to try things is the API page in your browser,
+http://localhost:8080/api/meals/docs. Click **Authorize** at the top, paste the `idToken`, and use
+**Try it out** on any endpoint.
 
 Or from PowerShell:
 
@@ -144,14 +179,11 @@ curl.exe http://localhost:8080/api/meals/foods/173944
 # Look up a packaged food by its barcode
 curl.exe http://localhost:8080/api/meals/foods/barcode/20048556
 
-# Make an account. The reply has a "token" you need for everything below.
-#   -X POST   send a POST request
-#   -H        add a header (here, saying the body is JSON)
-#   -d        the request body
-curl.exe -X POST http://localhost:8080/api/meals/auth/register -H "Content-Type: application/json" -d '{\"email\":\"me@example.com\",\"password\":\"password123\"}'
+# Save your idToken so you don't have to paste it every time (put your own token in the quotes)
+$TOKEN = "paste-the-idToken-here"
 
-# Save the token so you don't have to paste it every time (put your own token in the quotes)
-$TOKEN = "paste-the-token-here"
+# Check it works: this says who you're logged in as
+curl.exe http://localhost:8080/api/meals/auth/me -H "Authorization: Bearer $TOKEN"
 
 # Log 100 g of raw spinach for lunch
 curl.exe -X POST http://localhost:8080/api/meals/meals -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{\"meal_date\":\"2026-10-15\",\"meal_type\":\"lunch\",\"items\":[{\"fdc_id\":168462,\"grams\":100}]}'

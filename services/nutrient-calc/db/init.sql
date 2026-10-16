@@ -72,7 +72,7 @@ CREATE TABLE food_nutrient (
 --                whether an incomplete total is nearly right (say 95%) or could be far too low.
 -- A day with nothing logged has no rows at all, which means "no data", not "ate nothing".
 CREATE TABLE daily_totals (
-    user_id      BIGINT   NOT NULL,
+    user_id      TEXT     NOT NULL,   -- the user's Google ID (the "sub" in their login token)
     date         DATE     NOT NULL,
     nutrient_id  SMALLINT NOT NULL REFERENCES nutrient(id),
     amount       NUMERIC(14, 4),

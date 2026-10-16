@@ -1,16 +1,10 @@
 -- meal_db belongs to the meal-logging service, and nothing else touches it.
 -- Postgres runs this file once, the first time the meal-db container starts with an empty volume.
+-- There's no users table: people sign up and log in through Google, and we store their meals
+-- under their Google ID (the user_id columns below).
 
 -- pg_trgm lets Postgres match parts of words quickly, so searching "chick" finds "chicken" fast.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-CREATE TABLE users (
-    id             BIGSERIAL PRIMARY KEY,
-    email          TEXT NOT NULL UNIQUE,
-    password_hash  TEXT NOT NULL,
-    display_name   TEXT,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 -- The list of foods people can search for (filled in by the data loader).
 -- The nutrient values themselves are in nutrient_db. The two are matched up by fdc_id.
@@ -46,7 +40,7 @@ CREATE INDEX food_portion_fdc ON food_portion (fdc_id);
 
 CREATE TABLE meals (
     id          BIGSERIAL PRIMARY KEY,
-    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id     TEXT NOT NULL,   -- the user's Google ID (the "sub" in their login token)
     meal_date   DATE NOT NULL,
     meal_type   TEXT NOT NULL CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -69,7 +63,7 @@ CREATE INDEX meal_items_pending ON meal_items (calc_status) WHERE calc_status = 
 
 CREATE TABLE saved_recipes (
     id          BIGSERIAL PRIMARY KEY,
-    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id     TEXT NOT NULL,
     name        TEXT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -91,7 +85,7 @@ CREATE INDEX saved_recipe_items_recipe ON saved_recipe_items (recipe_id);
 -- (We need this as well as calc_status: if you delete the only meal on a day, there are no
 -- items left to mark as pending, but nutrient-calc still has the old totals.)
 CREATE TABLE pending_days (
-    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    meal_date  DATE   NOT NULL,
+    user_id    TEXT NOT NULL,
+    meal_date  DATE NOT NULL,
     PRIMARY KEY (user_id, meal_date)
 );

@@ -14,12 +14,12 @@ from fastapi.testclient import TestClient
 
 from app import db
 from app.main import app
-from tests.conftest import make_token
+from tests.conftest import make_service_token, make_user_token
 
 pytestmark = pytest.mark.skipif(os.getenv("INTEGRATION") != "1", reason="set INTEGRATION=1 to run")
 
 FOOD_A, FOOD_B = 990000001, 990000002   # made-up test foods
-USER_ID = 990001                         # made-up test user
+USER_ID = "integration-test-user"        # made-up test user
 DAY = date(2026, 1, 15)
 ENERGY, IRON, VIT_D = 1, 11, 32           # nutrient IDs from db/init.sql
 
@@ -42,8 +42,13 @@ def client():
             conn.execute("DELETE FROM daily_totals WHERE user_id = %s", (USER_ID,))
 
 
-def auth(sub=str(USER_ID), role="user"):
-    return {"Authorization": f"Bearer {make_token(sub=sub, role=role)}"}
+def auth(uid=USER_ID):
+    """Log in as a (fake) Google user."""
+    return {"Authorization": f"Bearer {make_user_token(uid)}"}
+
+
+def service_auth():
+    return {"Authorization": f"Bearer {make_service_token()}"}
 
 
 def by_key(nutrients):
@@ -105,7 +110,7 @@ def test_empty_day_removes_totals(client):
 
 
 def test_cannot_read_another_users_totals(client):
-    response = client.get(f"/api/nutrients/daily/{USER_ID}?start={DAY}&end={DAY}", headers=auth(sub="1"))
+    response = client.get(f"/api/nutrients/daily/{USER_ID}?start={DAY}&end={DAY}", headers=auth("someone-else"))
     assert response.status_code == 403
 
 
@@ -113,6 +118,6 @@ def test_service_token_can_write_for_any_user(client):
     response = client.put(
         f"/api/nutrients/daily/{USER_ID}/{DAY}",
         json={"items": [{"fdc_id": FOOD_A, "grams": 10}]},
-        headers=auth(sub="meal-logging", role="service"),
+        headers=service_auth(),
     )
     assert response.status_code == 200

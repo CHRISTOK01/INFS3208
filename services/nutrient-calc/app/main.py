@@ -16,6 +16,8 @@ async def lifespan(app: FastAPI):
     # Runs once when the service starts...
     if len(config.JWT_SECRET) < 32:
         raise RuntimeError("JWT_SECRET must be set and at least 32 characters long")
+    if not config.GOOGLE_PROJECT_ID:
+        raise RuntimeError("GOOGLE_PROJECT_ID must be set, so we know whose Google logins to accept")
     db.open_pool()
     log.info("%s %s starting", config.SERVICE_NAME, config.APP_VERSION)
     yield

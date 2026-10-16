@@ -19,7 +19,7 @@ from app import config, nutrient_client, repo
 log = logging.getLogger(config.SERVICE_NAME)
 
 
-def sync_day(conn: Connection, user_id: int, day: date) -> bool:
+def sync_day(conn: Connection, user_id: str, day: date) -> bool:
     """Send one day to nutrient-calc. Returns True if it worked, False if the day is still pending.
 
     The connection must not be in the middle of a transaction (call conn.commit() first), so
@@ -37,7 +37,7 @@ def sync_day(conn: Connection, user_id: int, day: date) -> bool:
     return True
 
 
-def recalculate_pending(conn: Connection, user_id: int | None, limit: int = 100) -> dict:
+def recalculate_pending(conn: Connection, user_id: str | None, limit: int = 100) -> dict:
     """Send every pending day to nutrient-calc (just one user's, or everyone's if user_id is None).
 
     Stops at the first failure: if nutrient-calc is still down, there's no point waiting for it

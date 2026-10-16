@@ -8,27 +8,6 @@ from app.foods import first_of_each_name, like_pattern, starts_with_pattern
 FOOD_COLUMNS = "fdc_id, name, data_type, category, barcode, prep_state, has_full_micros"
 
 
-# ---------------------------------------------------------------- users
-
-def create_user(conn: Connection, email: str, password_hash: str, display_name: str | None) -> dict:
-    """Add a user. Raises psycopg.errors.UniqueViolation if the email is already taken."""
-    return conn.execute(
-        "INSERT INTO users (email, password_hash, display_name) VALUES (%s, %s, %s) "
-        "RETURNING id, email, display_name",
-        (email, password_hash, display_name),
-    ).fetchone()
-
-
-def get_user_by_email(conn: Connection, email: str) -> dict | None:
-    return conn.execute(
-        "SELECT id, email, display_name, password_hash FROM users WHERE email = %s", (email,)
-    ).fetchone()
-
-
-def get_user(conn: Connection, user_id: int) -> dict | None:
-    return conn.execute("SELECT id, email, display_name FROM users WHERE id = %s", (user_id,)).fetchone()
-
-
 # ---------------------------------------------------------------- foods
 
 def search_foods(conn: Connection, words: list[str], state: str | None, limit: int) -> list[dict]:
@@ -99,7 +78,7 @@ def get_portions_by_id(conn: Connection, portion_ids: list[int]) -> dict[int, di
 
 # ---------------------------------------------------------------- meals
 
-def create_meal(conn: Connection, user_id: int, meal_date: date, meal_type: str) -> int:
+def create_meal(conn: Connection, user_id: str, meal_date: date, meal_type: str) -> int:
     return conn.execute(
         "INSERT INTO meals (user_id, meal_date, meal_type) VALUES (%s, %s, %s) RETURNING id",
         (user_id, meal_date, meal_type),
@@ -115,7 +94,7 @@ def add_meal_items(conn: Connection, meal_id: int, items: list[dict]):
         )
 
 
-def get_meal(conn: Connection, user_id: int, meal_id: int) -> dict | None:
+def get_meal(conn: Connection, user_id: str, meal_id: int) -> dict | None:
     """One meal, but only if it belongs to this user."""
     return conn.execute(
         "SELECT id, meal_date, meal_type, created_at FROM meals WHERE id = %s AND user_id = %s",
@@ -123,7 +102,7 @@ def get_meal(conn: Connection, user_id: int, meal_id: int) -> dict | None:
     ).fetchone()
 
 
-def get_meals(conn: Connection, user_id: int, start: date, end: date) -> list[dict]:
+def get_meals(conn: Connection, user_id: str, start: date, end: date) -> list[dict]:
     return conn.execute(
         "SELECT id, meal_date, meal_type, created_at FROM meals "
         "WHERE user_id = %s AND meal_date BETWEEN %s AND %s ORDER BY meal_date, created_at",
@@ -157,7 +136,7 @@ def delete_meal_item(conn: Connection, meal_id: int, item_id: int) -> bool:
 
 # ---------------------------------------------------------------- keeping nutrient-calc up to date
 
-def lock_day(conn: Connection, user_id: int, day: date):
+def lock_day(conn: Connection, user_id: str, day: date):
     """Stop anyone else changing or sending this user's day until our transaction finishes.
 
     This is a Postgres "advisory lock". It doesn't lock any table; it's just a named lock that
@@ -168,14 +147,14 @@ def lock_day(conn: Connection, user_id: int, day: date):
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"day:{user_id}:{day}",))
 
 
-def mark_day_pending(conn: Connection, user_id: int, day: date):
+def mark_day_pending(conn: Connection, user_id: str, day: date):
     conn.execute(
         "INSERT INTO pending_days (user_id, meal_date) VALUES (%s, %s) ON CONFLICT DO NOTHING",
         (user_id, day),
     )
 
 
-def get_day_items(conn: Connection, user_id: int, day: date) -> list[dict]:
+def get_day_items(conn: Connection, user_id: str, day: date) -> list[dict]:
     """Everything a user ate on one day, ready to send to nutrient-calc."""
     return conn.execute(
         """
@@ -188,7 +167,7 @@ def get_day_items(conn: Connection, user_id: int, day: date) -> list[dict]:
     ).fetchall()
 
 
-def mark_day_done(conn: Connection, user_id: int, day: date):
+def mark_day_done(conn: Connection, user_id: str, day: date):
     """nutrient-calc has the up-to-date day, so take it off the pending list."""
     conn.execute(
         """
@@ -201,18 +180,18 @@ def mark_day_done(conn: Connection, user_id: int, day: date):
     conn.execute("DELETE FROM pending_days WHERE user_id = %s AND meal_date = %s", (user_id, day))
 
 
-def get_pending_days(conn: Connection, user_id: int | None, limit: int) -> list[dict]:
+def get_pending_days(conn: Connection, user_id: str | None, limit: int) -> list[dict]:
     """Days still waiting to be sent, oldest first. user_id=None means every user's."""
     return conn.execute(
         "SELECT user_id, meal_date FROM pending_days "
-        "WHERE %s::bigint IS NULL OR user_id = %s ORDER BY meal_date LIMIT %s",
+        "WHERE %s::text IS NULL OR user_id = %s ORDER BY meal_date LIMIT %s",
         (user_id, user_id, limit),
     ).fetchall()
 
 
 # ---------------------------------------------------------------- saved recipes
 
-def create_recipe(conn: Connection, user_id: int, name: str, items: list[dict]) -> int:
+def create_recipe(conn: Connection, user_id: str, name: str, items: list[dict]) -> int:
     recipe_id = conn.execute(
         "INSERT INTO saved_recipes (user_id, name) VALUES (%s, %s) RETURNING id", (user_id, name)
     ).fetchone()["id"]
@@ -224,13 +203,13 @@ def create_recipe(conn: Connection, user_id: int, name: str, items: list[dict]) 
     return recipe_id
 
 
-def get_recipes(conn: Connection, user_id: int) -> list[dict]:
+def get_recipes(conn: Connection, user_id: str) -> list[dict]:
     return conn.execute(
         "SELECT id, name, created_at FROM saved_recipes WHERE user_id = %s ORDER BY name", (user_id,)
     ).fetchall()
 
 
-def get_recipe(conn: Connection, user_id: int, recipe_id: int) -> dict | None:
+def get_recipe(conn: Connection, user_id: str, recipe_id: int) -> dict | None:
     return conn.execute(
         "SELECT id, name, created_at FROM saved_recipes WHERE id = %s AND user_id = %s", (recipe_id, user_id)
     ).fetchone()

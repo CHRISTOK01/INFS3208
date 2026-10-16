@@ -73,7 +73,7 @@ def calculate(body: ItemList, claims: dict = Depends(current_claims), conn: Conn
 
 @router.put("/daily/{user_id}/{day}")
 def replace_day(
-    user_id: int,
+    user_id: str,
     day: date,
     body: ItemList,
     claims: dict = Depends(current_claims),
@@ -97,7 +97,7 @@ def replace_day(
 
 @router.get("/daily/{user_id}")
 def get_daily(
-    user_id: int,
+    user_id: str,
     start: date,
     end: date,
     claims: dict = Depends(current_claims),

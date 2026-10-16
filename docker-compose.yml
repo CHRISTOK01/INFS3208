@@ -103,6 +103,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       NUTRIENT_CALC_URL: http://nutrient-calc:8002
       JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       APP_VERSION: ${APP_VERSION:-1.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     # It doesn't wait for nutrient-calc on purpose. If nutrient-calc is down, meals still get
@@ -124,6 +125,7 @@ services:
     environment:
       DATABASE_URL: postgresql://nutrient:${NUTRIENT_DB_PASSWORD}@nutrient-db:5432/nutrient_db
       JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       APP_VERSION: ${APP_VERSION:-1.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
@@ -142,6 +144,7 @@ services:
       DATABASE_URL: postgresql://gap:${GAP_DB_PASSWORD}@gap-db:5432/gap_db
       NUTRIENT_CALC_URL: http://nutrient-calc:8002
       JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       APP_VERSION: ${APP_VERSION:-1.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
@@ -160,6 +163,7 @@ services:
       DATABASE_URL: postgresql://recommender:${RECOMMENDER_DB_PASSWORD}@recommender-db:5432/recommender_db
       GAP_ANALYSIS_URL: http://gap-analysis:8003
       JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       APP_VERSION: ${APP_VERSION:-1.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:

@@ -5,13 +5,14 @@ the day from scratch, so sending the same day twice gives the same result and no
 counted twice.
 """
 from datetime import date
+from urllib.parse import quote
 
 import httpx2
 
 from app import auth, config
 
 
-def send_day(user_id: int, day: date, items: list[dict]):
+def send_day(user_id: str, day: date, items: list[dict]):
     """Send one user's food for one day to nutrient-calc.
 
     items is a list of {"fdc_id": ..., "grams": ...}. An empty list tells nutrient-calc the day
@@ -19,9 +20,10 @@ def send_day(user_id: int, day: date, items: list[dict]):
     """
     # A short-lived token that says "this is meal-logging", so nutrient-calc lets us
     # update any user's totals
-    token = auth.create_token(config.SERVICE_NAME, role="service", seconds=60)
+    token = auth.create_service_token()
     response = httpx2.put(
-        f"{config.NUTRIENT_CALC_URL}/api/nutrients/daily/{user_id}/{day.isoformat()}",
+        # quote() makes sure the user's ID is safe to put in a web address
+        f"{config.NUTRIENT_CALC_URL}/api/nutrients/daily/{quote(user_id, safe='')}/{day.isoformat()}",
         json={"items": [{"fdc_id": i["fdc_id"], "grams": float(i["grams"])} for i in items]},
         headers={"Authorization": f"Bearer {token}"},
         timeout=config.NUTRIENT_CALC_TIMEOUT,
