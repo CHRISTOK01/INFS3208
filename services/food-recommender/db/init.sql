@@ -14,7 +14,14 @@ CREATE TABLE foods (
     fat_g              NUMERIC(8, 2),
     fibre_g            NUMERIC(8, 2),
     typical_serving_g  NUMERIC(8, 2) NOT NULL DEFAULT 100,
+    prep_state         TEXT,              -- 'raw', 'cooked', or empty if the name doesn't say
     has_full_micros    BOOLEAN NOT NULL DEFAULT false,
+    -- Only Australian (AUSNUT) foods have these three. FSANZ tags each food with its Australian
+    -- Dietary Guidelines group (like 301 "Fresh/canned fruit") and whether it's a "discretionary"
+    -- (sometimes) food. The recommender only suggests foods that have them.
+    adg_code           INTEGER,
+    adg_name           TEXT,
+    discretionary      BOOLEAN,
     -- Looks like {"magnesium": 79.0, "iron": 2.7, ...}: the amount per 100 g, in the same units
     -- nutrient-calc uses. If we don't know a nutrient, it's just left out of the map (never 0).
     nutrients          JSONB NOT NULL DEFAULT '{}'::jsonb

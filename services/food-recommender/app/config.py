@@ -11,3 +11,5 @@ GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")  # the Google Cloud proje
 APP_VERSION = os.getenv("APP_VERSION", "dev")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+GAP_ANALYSIS_URL = os.getenv("GAP_ANALYSIS_URL", "http://localhost:8003")
+GAP_ANALYSIS_TIMEOUT = float(os.getenv("GAP_ANALYSIS_TIMEOUT", "5"))  # seconds to wait for gap-analysis

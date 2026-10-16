@@ -24,3 +24,11 @@ def test_australian_foods_come_first_in_search():
 def test_new_nutrients_dont_count_as_vitamins_or_minerals():
     for key in ["caffeine", "alcohol", "free_sugars", "omega3_lc"]:
         assert key not in usda.VITAMINS_AND_MINERALS
+
+
+def test_dietary_guidelines_details():
+    assert ausnut.adg_details(301, "Fresh/canned fruit ", "Non-Discretionary") == {
+        "adg_code": 301, "adg_name": "Fresh/canned fruit", "discretionary": False}
+    assert ausnut.adg_details(90, "Unclassified", "Discretionary")["discretionary"] is True
+    assert ausnut.adg_details(None, None, None) == {"adg_code": None, "adg_name": None, "discretionary": None}
+

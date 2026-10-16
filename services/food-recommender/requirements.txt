@@ -6,7 +6,8 @@ psycopg-pool==3.3.3
 pyjwt==2.15.1
 # Lets PyJWT check Google's RS256 login tokens
 cryptography==50.0.2
+# Used to call gap-analysis. FastAPI's test client needs it too.
+httpx2==2.13.1
 
 # For the tests. They're kept in the image so `docker compose run --rm food-recommender pytest` works.
 pytest==9.1.1
-httpx2==2.13.1

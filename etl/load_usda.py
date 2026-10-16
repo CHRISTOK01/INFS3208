@@ -136,13 +136,15 @@ def load_nutrient_db(conn, foods):
 def load_recommender_db(conn, foods):
     with conn.cursor() as cur:
         with cur.copy("COPY foods (fdc_id, name, category, data_type, kcal_per_100g, protein_g, carbs_g, "
-                      "fat_g, fibre_g, typical_serving_g, has_full_micros, nutrients) FROM STDIN") as copy:
+                      "fat_g, fibre_g, typical_serving_g, prep_state, has_full_micros, "
+                      "adg_code, adg_name, discretionary, nutrients) FROM STDIN") as copy:
             for f in foods:
                 n = f["nutrients"]
                 micros = {k: v for k, v in n.items() if k not in usda.MACROS}
                 copy.write_row((f["fdc_id"], f["name"], f["category"], f["data_type"],
                                 n.get("energy"), n.get("protein"), n.get("carbs"), n.get("fat"), n.get("fibre"),
-                                f["typical_serving_g"], f["has_full_micros"], Jsonb(micros)))
+                                f["typical_serving_g"], f["prep_state"], f["has_full_micros"],
+                                f["adg_code"], f["adg_name"], f["discretionary"], Jsonb(micros)))
 
 
 def load_gap_db(conn):

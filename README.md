@@ -26,7 +26,7 @@ the right service. More detail on the design is in [docs/architecture.md](docs/a
 - [x] Phase 3a: nutrient-calc service
 - [x] Phase 3b: meal-logging service
 - [x] Phase 3c: gap-analysis service
-- [ ] Phase 3d: food-recommender
+- [x] Phase 3d: food-recommender
 - [ ] Phase 4: React frontend and demo users
 - [ ] Phase 5: load test and failure test
 - [ ] Phase 6: final README
@@ -156,6 +156,13 @@ the others.
 | A day's intake against your targets, and the calories and macros you have left | `GET /today/{user_id}?date=2026-10-16` | yes |
 | Your gaps and excesses over the last 7 and 14 days | `GET /report/{user_id}?date=2026-10-16` | yes |
 
+**food-recommender** (`/api/recommend/...`)
+
+| What | Endpoint | Login needed? |
+|---|---|---|
+| Foods that would fill your gaps from the last 14 days, and fit the calories you have left today | `GET /foods/{user_id}?date=2026-10-16` | yes |
+| Good sources of one nutrient, gaps or not | `GET /foods/{user_id}?date=2026-10-16&nutrient=iron` | yes |
+
 ## Trying out meal-logging
 
 First you need a login token from Google. Until the website exists (phase 4), you can get one
@@ -253,6 +260,28 @@ $report.windows[0].nutrients | Format-Table nutrient_key, avg_intake, unit, pct_
 The report needs at least 3 days with food logged before it can say anything. Until then every
 nutrient shows "unknown". The demo users in phase 4 will come with weeks of meals already logged.
 
+## Trying out food-recommender
+
+Same PowerShell window again, so `$TOKEN` and `$MYID` are still set.
+
+```powershell
+# Foods that would help fill your gaps. Each one says why, in plain words.
+#   date   your today (the gaps come from the 14 days before it)
+$rec = curl.exe -s "http://localhost:8080/api/recommend/foods/$MYID`?date=2026-10-16" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
+$rec.gaps | Format-Table nutrient_key, avg_intake, target_amount, shortfall, unit
+$rec.suggestions | Format-List name, why
+$rec.notes
+
+# Good sources of one nutrient, even if you're not short on it
+#   nutrient   any nutrient with a daily target, like iron, calcium, vitamin_d or fibre
+#   limit      how many foods to send back (1 to 20, 8 if you leave it out)
+$rec = curl.exe -s "http://localhost:8080/api/recommend/foods/$MYID`?date=2026-10-16&nutrient=iron&limit=5" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
+$rec.suggestions | Format-List name, why
+```
+
+With no gaps yet (fewer than 3 days logged, or nothing short), `suggestions` is empty and `notes`
+says why.
+
 ## Running the tests
 
 ```bash
@@ -270,6 +299,10 @@ docker compose run --rm -e INTEGRATION=1 meal-logging pytest -v
 
 # gap-analysis's tests. The INTEGRATION=1 ones need the reference intakes loaded and nutrient-calc running.
 docker compose run --rm -e INTEGRATION=1 gap-analysis pytest -v
+
+# food-recommender's tests. The INTEGRATION=1 ones need the food data loaded, and gap-analysis
+# and nutrient-calc running.
+docker compose run --rm -e INTEGRATION=1 food-recommender pytest -v
 
 # Run the data loader's tests
 #   --entrypoint pytest  run pytest instead of the loader

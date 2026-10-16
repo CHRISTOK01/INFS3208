@@ -236,6 +236,7 @@ def build_targets(profile: dict, references: list[dict], on: date) -> dict:
     situation = {
         "age": age,
         "life_stage": stage,
+        "diet": diet,              # food-recommender uses this to leave out meat, fish, eggs or dairy
         "pregnancy_week": week,
         "trimester": trimester(week) if week is not None else None,
         "bmr_kcal": round(resting),

@@ -300,3 +300,39 @@ are mixed together and named differently.
 - `docs/architecture.md`
 
 ---
+
+## 10. food-recommender service
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Building the fourth service, which suggests foods to fill the gaps
+gap-analysis finds.
+
+**Prompts Used:**
+- "start on the next micro-service"
+
+**What Claude Code did and gave back:**
+- Found that AUSNUT tags every food with its Australian Dietary Guidelines food group and whether
+  it's "discretionary", and changed the data loader to copy those into recommender_db, so the
+  recommender only suggests everyday foods using FSANZ's own judgement.
+- Built the service: it asks gap-analysis for the 14-day gaps and for what's left today (calories,
+  limits, diet, pregnancy), then scores every suitable food on one standard serve by how much of
+  each shortfall it makes up, and explains each suggestion in a sentence. It also has a "foods rich
+  in one nutrient" option. gap-analysis's /today now also sends the person's situation (diet and
+  pregnancy) for this.
+- Looked up FSANZ's pregnancy advice (listeria and mercury in fish) and leaves those foods out for
+  pregnant users, and leaves out meat, fish, eggs or dairy to match the person's diet.
+- Tried it on real data and fixed what looked wrong: AUSNUT's first portion size was often the
+  whole food ("1 whole duck"), so it switched to the dietary guidelines' standard serves (checked
+  against the Nutrition Australia fact sheet); it also left out baby foods, wild and game foods,
+  ingredients like dried mushroom and egg yolk, and raw or dry forms of foods you'd cook.
+- Added unit tests, API tests with gap-analysis faked, and integration tests (including a vegan
+  check), and ran a full test through the gateway with a throwaway Google account.
+
+**Where the AI/MT Tool Was Used:**
+- `services/food-recommender/app/rules.py`, `app/routes.py`, `app/repo.py`, `app/gap_client.py`, `app/config.py`, `app/main.py`, `db/init.sql`, `requirements.txt`, `tests/`
+- `services/gap-analysis/app/routes.py`, `app/targets.py`, `tests/test_targets.py`
+- `etl/ausnut.py`, `etl/usda.py`, `etl/load_usda.py`, `etl/tests/test_ausnut.py`
+- `README.md`, `docs/architecture.md`, `etl/README.md`
+
+---

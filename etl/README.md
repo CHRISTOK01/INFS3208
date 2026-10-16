@@ -86,7 +86,7 @@ their USDA `fdc_id`.
 | meal_db | `food_catalogue` | food names, type, category, barcode, raw/cooked, data-confidence label |
 | meal_db | `food_portion` | household measures and their weight, like "1 cup = 30 g" |
 | nutrient_db | `food_nutrient` | how much of each nutrient is in 100 g of each food |
-| recommender_db | `foods` | one row per food: calories, macros, and the vitamins and minerals as JSON |
+| recommender_db | `foods` | one row per food: calories, macros, the vitamins and minerals as JSON, the usual serving, and (Australian foods only) the dietary guidelines food group and whether it's a "discretionary" food |
 | gap_db | `reference_intakes` | recommended daily intakes by age and sex, from `reference_intakes.csv` |
 
 ### Row counts from the last full load (2026-10-16)

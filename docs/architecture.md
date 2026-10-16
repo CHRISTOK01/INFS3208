@@ -16,7 +16,7 @@ service's name, for example `http://nutrient-calc:8002`. The addresses come from
 
 - meal-logging calls nutrient-calc with `PUT /api/nutrients/daily/{user}/{date}`, sending all of that day's food
 - gap-analysis calls nutrient-calc with `GET /api/nutrients/daily/{user}?start&end` to get the recent history
-- food-recommender will ask gap-analysis for the user's biggest gaps and how many calories they have left (not built yet)
+- food-recommender calls gap-analysis with `GET /api/gaps/report/{user}` (the gaps) and `GET /api/gaps/today/{user}` (calories left, today's amounts and limits, diet and pregnancy)
 
 There are no message queues. Every call is a plain request that waits for its answer.
 
@@ -213,7 +213,7 @@ Calories and macros are a daily budget (`GET /api/gaps/today/...`). For each nut
 | Sodium has no target, only an upper limit (2,000 mg for adults) | NHMRC only gives a range for the minimum, and the worry with sodium is too much |
 
 It also says how many days met the target, and lists the 5 biggest gaps (lowest % first). The
-food-recommender will use those.
+food-recommender uses those.
 
 **If nutrient-calc is down**, the report sends the last saved results from `gap_results`, marked
 `"stale": true`, instead of an error. `GET /today` can't do that (there's nothing saved for today),
@@ -221,3 +221,52 @@ so it replies 503.
 
 **gap-analysis asks nutrient-calc with a service token**, after checking the person is allowed to
 see that user's data. That way the user's own login token doesn't need to be passed along.
+
+## food-recommender: suggesting foods
+
+`GET /api/recommend/foods/{user}?date=...` asks gap-analysis for two things: the report (what the
+person is short on over the last 14 days) and today (the calories they have left, what they've
+eaten so far against each limit, and their diet and pregnancy). It then picks foods from its own
+copy of the food data. All the rules are in `app/rules.py`.
+
+**Only Australian (AUSNUT) foods are suggested.** FSANZ tags every AUSNUT food with its Australian
+Dietary Guidelines food group code (like 301 "Fresh/canned fruit") and says whether it's a
+"discretionary" (sometimes) food. That lets us stick to everyday foods using FSANZ's own judgement
+rather than a list we made up. They also have a value for nearly every nutrient, so the scores are
+fair.
+
+**Everything is worked out on one standard serve** from the dietary guidelines: 75 g of
+vegetables, 150 g of fruit, a 40 g slice of bread, 65 g of cooked red meat, 80 g of poultry, 100 g
+of fish, 2 eggs (120 g), 30 g of nuts, 170 g of tofu, a 250 ml cup of milk, 40 g of cheese, 200 g of
+yoghurt, and so on (the full list is `STANDARD_SERVES` in `rules.py`, from eatforhealth.gov.au). We
+tried the first portion size AUSNUT lists for each food first, but that's often the whole thing
+("1 whole duck (730 g)", "1 cabbage (1.4 kg)"), so the scores were silly.
+
+| Rule | Why |
+|---|---|
+| Only non-discretionary foods with a standard serve | so no cake for iron, and no mixed dishes, juice, dried fruit (the guidelines say only occasionally), flour or oils |
+| No foods for babies or toddlers, medical drinks, or wild-harvested and game foods | real foods, but odd to suggest to most people |
+| No ingredients or concentrated forms (dried mushroom, garlic, egg yolk, wheat germ, popcorn...) | nobody eats a whole standard serve of them; dried seeds are fine |
+| No raw or dry forms of foods you'd cook (raw chicken, dry rice, dried lentils, raw potato) | raw fruit, vegetables, nuts and seeds are fine |
+| Vegetarians get no meat or fish; vegans also no eggs or dairy (plant milks are fine) | worked out from the food group code, e.g. 5011 is meat and 4037 is calcium-enriched plant milk |
+| In pregnancy, nothing FSANZ advises against: soft cheeses, pate, smoked seafood, sprouts, rockmelon (listeria), and shark, billfish, orange roughy and catfish (mercury) | FSANZ listeria and mercury-in-fish advice |
+| A serve can't take today's total over a limit (sodium, caffeine, iron's upper limit...) | the vitamin A limit is only checked for animal foods, because it's for retinol and plants have beta-carotene instead |
+| A serve can't have more energy than is left today (but 150 kcal is always allowed) | so there's still something to suggest once the day's energy is used up |
+| It has to make up at least 10% of one shortfall | otherwise it's not really helping |
+
+**The score:** for each gap, how much of the daily shortfall (target minus average) one serve makes
+up, counted up to 100%, all added together. A food that helps with two gaps beats one that helps
+with one, and going far past what's needed doesn't earn extra. Ties go to the food with less
+energy. If a food has no value for a nutrient, that nutrient just doesn't count for it; unknown is
+never zero.
+
+**For variety**, only the best food of each kind is kept (the part of the name before the first
+comma, so one "Beef" not five cuts of it), and at most 3 come from each food group.
+
+Each suggestion explains itself, like "A standard serve (100 g) gives 8.8 ug of vitamin B12 (100%
+of what you're short each day), 114 ug of selenium (100%) and 5 ug of vitamin D (99%), for 124
+kcal." (that one is cooked sardines).
+
+**If gap-analysis is down** it replies 503, and 404 if the person hasn't filled in their profile.
+Adding `&nutrient=iron` skips the gaps and finds good sources of that nutrient, with the whole daily
+target as the "shortfall".

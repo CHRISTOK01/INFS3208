@@ -260,6 +260,10 @@ def make_food(fdc_id, name, data_type, category, barcode, nutrients, portions, s
         "nutrients": nutrients,
         "portions": portions,
         "typical_serving_g": serving_g,
+        # Only AUSNUT has these (see ausnut.py), so they start empty
+        "adg_code": None,
+        "adg_name": None,
+        "discretionary": None,
     }
 
 

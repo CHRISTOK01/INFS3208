@@ -118,6 +118,15 @@ def sheet_rows(path: Path, sheet: str, first_header: str):
     return header, [r for r in rows if r and r[0] is not None]
 
 
+def adg_details(code, name, flag) -> dict:
+    """The dietary guidelines details from one row of the food details file."""
+    return {
+        "adg_code": int(code) if code not in (None, "") else None,
+        "adg_name": clean(name) or None,
+        "discretionary": clean(flag).lower() == "discretionary" if clean(flag) else None,
+    }
+
+
 def read_afcd_extras(folder: Path) -> dict[str, dict[str, float]]:
     """{public food key: {"copper": .., "manganese": .., "pantothenic": ..}} for the values AFCD has."""
     header, rows = sheet_rows(folder / AFCD_FILE, "All solids & liquids per 100 g", "Public Food Key")
@@ -170,7 +179,15 @@ def read_foods(folder: Path) -> list[dict]:
     # The food group (like "Breads, and bread rolls") is in the details file
     d_header, d_rows = sheet_rows(folder / DETAILS_FILE, "Food details", "Survey ID")
     group_col = d_header.index("2023 Food and dietary supplement classification") + 1   # the name is next to the code
-    groups = {int(r[0]): clean(r[group_col]) or None for r in d_rows}
+    # FSANZ also tags each food with its Australian Dietary Guidelines food group (a code like 301
+    # for "Fresh/canned fruit") and whether it's a "discretionary" (sometimes) food. The recommender
+    # uses these so it only suggests everyday foods.
+    adg_col = d_header.index("2023 Australian Dietary Guidelines classification")
+    flag_col = d_header.index("Discretionary food classification")
+    groups, guidelines = {}, {}
+    for r in d_rows:
+        groups[int(r[0])] = clean(r[group_col]) or None
+        guidelines[int(r[0])] = adg_details(r[adg_col], r[adg_col + 1], r[flag_col])
 
     extras = read_afcd_extras(folder)
     portions = read_portions(folder)
@@ -192,6 +209,8 @@ def read_foods(folder: Path) -> list[dict]:
         food_portions = portions.get(food_id, [])
         # The first measure that isn't just a density is the most typical serving
         serving = next((g for text, g in food_portions if not text.startswith("1 cup (")), 100.0)
-        foods.append(usda.make_food(food_id, clean(r[name_col]), "ausnut_food", groups.get(food_id),
-                                    None, nutrients, food_portions, serving))
+        food = usda.make_food(food_id, clean(r[name_col]), "ausnut_food", groups.get(food_id),
+                              None, nutrients, food_portions, serving)
+        food.update(guidelines.get(food_id, {}))
+        foods.append(food)
     return foods

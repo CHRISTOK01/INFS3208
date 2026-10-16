@@ -148,12 +148,13 @@ def today(
 ):
     """One day's intake against the targets, and how much energy and macros are left.
 
-    The website sends its own date, because "today" depends on where the person is.
+    The website sends its own date, because "today" depends on where the person is. The
+    situation (age, diet, pregnancy and so on) is included for food-recommender.
     """
     worked_out = user_targets(conn, claims, user_id, day)
     days = fetch_days(user_id, day, day)
     result = gaps.today_vs_targets(worked_out["targets"], days[0] if days else None)
-    return {"user_id": user_id, "date": day, **result}
+    return {"user_id": user_id, "date": day, "situation": worked_out["situation"], **result}
 
 
 @router.get("/report/{user_id}")

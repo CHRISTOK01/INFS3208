@@ -142,6 +142,7 @@ def test_breastfeeding_adds_2_mj():
     assert rows["energy"]["target_amount"] == 2660
     assert rows["iron"]["target_amount"] == 9
     assert result["situation"]["life_stage"] == "breastfeeding"
+    assert result["situation"]["diet"] == "omnivore"
 
 
 # ---------------------------------------------------------------- diet, age and the rest
