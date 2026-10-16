@@ -3,41 +3,59 @@ from datetime import date
 
 from psycopg import Connection
 
-from app.foods import first_of_each_name, like_pattern, starts_with_pattern
+from app.foods import Search, first_of_each_name, like_pattern, main_entry_pattern, starts_with_pattern, word_start_pattern
 
 FOOD_COLUMNS = "fdc_id, name, data_type, category, barcode, prep_state, has_full_micros"
 
 
 # ---------------------------------------------------------------- foods
 
-def search_foods(conn: Connection, words: list[str], state: str | None, limit: int) -> list[dict]:
-    """Find foods whose name contains every word.
+def search_foods(conn: Connection, search: Search, limit: int, typed: str) -> list[dict]:
+    """Find foods whose name contains every word. `typed` is the whole search as typed.
 
     The order is:
-      1. foods matching the raw/cooked choice (if one was given)
-      2. names that start with the first word, so "milk" finds "Milk, whole" before "Yogurt, whole milk"
-      3. Foundation, then SR Legacy, then FNDDS, then Branded (search_rank 1 to 4)
-      4. how closely the name matches what was typed
-      5. shorter names, so "Bananas, raw" comes before "Bananas, dehydrated, or banana powder"
+      0. if a cooking word was typed, names that start with exactly what was typed, so "baked beans"
+         finds "Baked beans, canned" even though "baked" is usually a cooking word
+      1. foods matching the raw/cooked choice (if there is one)
+      2. main entries, where the words (or just the first word) are the whole first part of the
+         name: "peanut butter" finds "Peanut butter, smooth", "chicken breast" finds "Chicken,
+         breast, ...", and "banana" finds "Banana, cavendish, raw" before "Banana chip"
+      3. names that start with the first word, so "milk" finds "Milk, cow" before "Yogurt, whole milk"
+      4. Australian foods, then Foundation, SR Legacy, FNDDS and Branded (search_rank 1 to 5)
+      5. names with the cooking word that was typed, at the start of a word ("roast" finds
+         "roasted", but "boiled" doesn't count "parboiled")
+      6. FSANZ's "not further defined" foods, which are its average of the usual kinds of that food
+      7. raw foods, when no raw/cooked choice was made, so "banana" finds the fresh fruit first
+      8. how closely the name matches what was typed
+      9. shorter names, so "Bananas, raw" comes before "Bananas, dehydrated, or banana powder"
     The trigram index on name (see db/init.sql) keeps this to a few milliseconds.
 
     USDA sometimes lists the same food twice under the same name (different lab samples), so we
     fetch a few extra rows and keep only the first food with each name.
     """
+    words = search.words
     conditions = " AND ".join("name ILIKE %s" for _ in words)
     rows = conn.execute(
         f"""
         SELECT {FOOD_COLUMNS}
           FROM food_catalogue
          WHERE {conditions}
-         ORDER BY COALESCE(prep_state = %s, false) DESC,
+         ORDER BY COALESCE(name ~* %s, false) DESC,
+                  COALESCE(prep_state = %s, false) DESC,
+                  (name ~* %s OR name ~* %s) DESC,
                   name ILIKE %s DESC,
                   search_rank,
+                  COALESCE(name ~* %s, false) DESC,
+                  name ILIKE '%%, not further defined' DESC,
+                  COALESCE(%s::text IS NULL AND prep_state = 'raw', false) DESC,
                   similarity(name, %s) DESC,
                   length(name)
          LIMIT %s
         """,
-        [like_pattern(w) for w in words] + [state, starts_with_pattern(words[0]), " ".join(words), limit * 2],
+        [like_pattern(w) for w in words]
+        + [main_entry_pattern(search.all_words) if search.cooking_word else None, search.state, main_entry_pattern(words),
+           main_entry_pattern(words[:1]), starts_with_pattern(words[0]),
+           word_start_pattern(search.cooking_word) if search.cooking_word else None, search.state, typed, limit * 2],
     ).fetchall()
     return first_of_each_name(rows)[:limit]
 

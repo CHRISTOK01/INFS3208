@@ -15,7 +15,7 @@ When one service needs something from another, it makes a normal REST call using
 service's name, for example `http://nutrient-calc:8002`. The addresses come from environment variables.
 
 - meal-logging calls nutrient-calc with `PUT /api/nutrients/daily/{user}/{date}`, sending all of that day's food
-- gap-analysis will call nutrient-calc with `GET /api/nutrients/daily/{user}?start&end` to get the recent history (not built yet)
+- gap-analysis calls nutrient-calc with `GET /api/nutrients/daily/{user}?start&end` to get the recent history
 - food-recommender will ask gap-analysis for the user's biggest gaps and how many calories they have left (not built yet)
 
 There are no message queues. Every call is a plain request that waits for its answer.
@@ -25,8 +25,15 @@ There are no message queues. Every call is a plain request that waits for its an
 **Every service has its own Postgres container.** A service owns its data. If another service
 needs it, it asks through the API rather than reading the database directly.
 
-**Services are linked by IDs, not shared tables.** Foods are matched across services by their USDA
-`fdc_id`, and nutrients by a short name such as `magnesium`. A few columns (like food names) are
+**Australian food data comes first.** AUSNUT 2023 (FSANZ) has 3,741 foods as Australians eat them,
+with every nutrient filled in, including iodine. US foods are fortified differently (US rice and
+flour have added iron and folate; Australian bread has iodised salt and folic acid), so US data
+would get those wrong for people here. USDA is still loaded as a fallback for foods AUSNUT doesn't
+have, and for barcodes.
+
+**Services are linked by IDs, not shared tables.** Foods are matched across services by `fdc_id`
+(the USDA ID, or the 8-digit AUSNUT survey ID for Australian foods), and nutrients by a short name
+such as `magnesium`. A few columns (like food names) are
 copied into more than one database on purpose, so no service has to reach into another's tables.
 
 **Logins are handled by Google, not by us.** See "Logging in" below.
@@ -53,26 +60,16 @@ comes out the same and nothing gets counted twice.
 no row for it in `food_nutrient`. Daily totals then show the amount as `NULL` with `is_complete =
 false`. Otherwise someone could be told they're low on a nutrient just because the data was missing.
 
-**Each daily total also says how much of it we actually know (`coverage_pct`).** A lot of
-nutrients are missing from the data, mostly because packaged (Branded) foods only list a few things
-on the label. Here's how many of our 43,593 foods have a value, from the last load:
-
-| Nutrient | Foods with a value |
-|---|---|
-| energy, protein, carbs, fat, sodium, calcium, iron | about 98 to 100% |
-| potassium, vitamin C, vitamin D | about 60 to 70% |
-| magnesium, zinc, phosphorus, B vitamins, folate, vitamin A | about 30% (about 90% of generic foods) |
-| manganese, pantothenic acid | about 15% |
-| iodine | 0.3% |
+**Each daily total also says how much of it we actually know (`coverage_pct`).** Australian foods
+have every nutrient (apart from copper, manganese and pantothenic acid for some of them), but USDA's
+packaged (Branded) foods only list what's on the label, often just calories, macros, sodium,
+calcium and iron.
 
 So `is_complete` on its own is too harsh. One muesli bar with no magnesium on its label would mark
 the whole day's magnesium as incomplete. `coverage_pct` is the share of the day's food, by weight,
 that had a value. If it's 95%, the total is close to the truth. If it's 20%, the total is only a
-"you had at least this much" figure. gap-analysis will use it to decide between "low" and "not
-enough data".
-
-**Iodine will be left out of gap analysis and recommendations.** USDA has hardly any iodine data,
-so it would show as unknown almost every day. nutrient-calc still stores and reports what there is.
+"you had at least this much" figure. gap-analysis uses it to decide between "low" and "not
+enough data" (see the gap-analysis rules below).
 
 **Plain SQL with psycopg 3, no ORM.** The SQL stays visible and easy to explain, and psycopg's
 built-in COPY support makes bulk loading the USDA data fast.
@@ -104,6 +101,8 @@ A service only accepts a Google token if:
 - Google really signed it (checked with Google's public keys, which we download and keep for an hour)
 - it was made for **our** project (`GOOGLE_PROJECT_ID`), not some other app that uses Google login
 - it hasn't expired (Google's tokens last an hour, and the website quietly gets a new one)
+- (we allow 30 seconds of difference between Google's clock and ours, because a brand-new token
+  can otherwise look like it was made "in the future" and get rejected straight after signing up)
 
 The token's `sub` is the person's Google ID (a string like `"Xy7kP2..."`). Every service stores
 people's data under that ID, so the `user_id` columns are text.
@@ -148,9 +147,77 @@ one. The lock is kept in the database, so it works however many copies of meal-l
 `MISS`. If Redis is down, searches go straight to the database. After a Redis error, meal-logging
 leaves Redis alone for 30 seconds, so only one search waits for it to fail.
 
-**Search order:** foods matching your raw/cooked choice, then names starting with the first word
-you typed, then Foundation, SR Legacy, FNDDS, Branded, then the closest match. Every word you type
-has to appear in the name, and the trigram index keeps this to a few milliseconds.
+**Search tries to find what people mean**, not just names containing the words. The full order
+is in `search_foods` in `app/repo.py`. The main ideas:
+
+| Rule | Example |
+|---|---|
+| Plural endings are cut off, so both data sets match | "strawberries" finds AUSNUT's "Strawberry, raw" and USDA's "Strawberries, raw" |
+| Cooking words mean "cooked first" instead of having to be in the name, because AUSNUT and USDA describe cooking differently | "rice white boiled" finds "Rice, white, cooked"; "boiled" doesn't count "parboiled" |
+| ...unless the whole search is the start of a name | "baked beans" finds "Baked beans, canned in tomato sauce" |
+| Main entries come before things that only mention the food | "banana" finds "Banana, cavendish, raw" before "Banana chip"; "egg" skips "Eggplant" |
+| Australian foods first, then USDA | |
+| FSANZ's "not further defined" foods, its average of the usual kinds of a food | "apple" finds "Apple, raw, not further defined" |
+| Raw before cooked when you haven't said | "potato" finds the raw potato, not chips |
+
+Every remaining word has to appear in the name, and the trigram index keeps this to a few
+milliseconds.
 
 **Barcodes** are compared with leading zeros removed, because USDA stores some with extra zeros
 (`0000020048556`) that a scanner wouldn't give you.
+
+## gap-analysis: targets and gaps
+
+**Targets are worked out fresh for the day being looked at**, from the profile and the NHMRC
+table, rather than stored. That's because they change on their own: age moves on with each
+birthday, and pregnancy needs change with each trimester (worked out from the due date). The
+profile asks for sex, date of birth, height, weight, a normal day's activity (four choices, each
+with an example), how many times a week they exercise, their goal (lose, maintain or gain), their
+diet (omnivore, vegetarian or vegan), and, for women, a due date or whether they're breastfeeding.
+
+Every number comes with a note of where it came from. All the rules and their sources are at the
+top of `app/targets.py`:
+
+| Target | How it's worked out | Source |
+|---|---|---|
+| Energy | BMR (Mifflin-St Jeor) x physical activity level, which is NHMRC's own method | NHMRC; Frankenfield 2005 for the equation |
+| Activity level | the middle of NHMRC's range for the chosen lifestyle (1.45 to 2.2), plus 0.3 for every 4.5 exercise sessions a week, capped at 2.5 | NHMRC |
+| Pregnancy and breastfeeding | +0 / +1.4 / +1.9 MJ a day by trimester, +2.0 MJ breastfeeding; BMR uses the weight before pregnancy | NHMRC |
+| Goal | lose: -500 kcal a day (about 0.5 kg a week), gain: +250 kcal; never below BMR; no loss or gain targets while pregnant or breastfeeding | about 7,700 kcal per kg of body fat |
+| Protein | the NHMRC RDI per kg (higher in pregnancy and breastfeeding), raised to 1.6 g/kg when losing or gaining and 1.4 g/kg when training 3+ times a week, kept within 15-25% of energy | NHMRC; Morton 2018; ISSN 2017 |
+| Fat, carbs | fat 30% of energy (NHMRC range 20-35%), carbs the rest, with a note if carbs fall outside 45-65% | NHMRC |
+| Saturated fat, free sugars | each under 10% of energy | NHMRC; WHO 2015 |
+| Alcohol | adults at most 10 standard drinks a week (14.3 g a day on average); none under 18, pregnant or breastfeeding | NHMRC 2020 |
+| Caffeine | 400 mg adults, 200 mg in pregnancy, 3 mg per kg under 18 | FSANZ; EFSA 2015 |
+| Vitamins, minerals, fibre, omega-3 | the NHMRC RDI or AI for the person's age, sex and life stage, plus NHMRC's long-term "aim" where there is one (like 28 g of fibre for women) | NHMRC |
+| Iron and zinc for vegetarians and vegans | x 1.8 and x 1.5, because less is absorbed from plants | NHMRC |
+
+Sex is asked as male or female only because the NHMRC tables and the calorie equation are split
+that way. Vitamin K and choline aren't tracked: the Australian food data doesn't have them.
+
+**The report** (`GET /api/gaps/report/{user}?date=...`) looks at the 7 and 14 full days before
+the given date. Today isn't included, because a half-logged day would make you look short on
+everything. Fibre, vitamins, minerals and omega-3 are checked against their targets, and the things
+with only a limit (sodium, saturated fat, free sugars, alcohol, caffeine) against that limit.
+Calories and macros are a daily budget (`GET /api/gaps/today/...`). For each nutrient:
+
+| Rule | Why |
+|---|---|
+| Every day with food logged counts | days with nothing logged don't, because not logging isn't the same as not eating |
+| At least 3 days with data, or the nutrient is "unknown" | too little to judge |
+| Days where we know the nutrient for at least 80% of the food give a real total | if there are 3 or more of those, only they are used |
+| Otherwise the partial totals are used as a minimum (`"is_minimum": true`) | the foods with no value could only add to them |
+| **gap** if the average is under 70% of the target, from real totals only | a minimum that looks low might not be, so that's "unknown" instead |
+| **ok** if the average reaches 70% of the target, even as a minimum | NHMRC targets cover nearly everyone, so a bit under isn't a worry |
+| **excess** if the average is above the upper limit | |
+| Sodium has no target, only an upper limit (2,000 mg for adults) | NHMRC only gives a range for the minimum, and the worry with sodium is too much |
+
+It also says how many days met the target, and lists the 5 biggest gaps (lowest % first). The
+food-recommender will use those.
+
+**If nutrient-calc is down**, the report sends the last saved results from `gap_results`, marked
+`"stale": true`, instead of an error. `GET /today` can't do that (there's nothing saved for today),
+so it replies 503.
+
+**gap-analysis asks nutrient-calc with a service token**, after checking the person is allowed to
+see that user's data. That way the user's own login token doesn't need to be passed along.

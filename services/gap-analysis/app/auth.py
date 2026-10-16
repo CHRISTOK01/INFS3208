@@ -44,6 +44,9 @@ def decode_google_token(token: str) -> dict:
         audience=config.GOOGLE_PROJECT_ID,
         issuer=f"https://securetoken.google.com/{config.GOOGLE_PROJECT_ID}",
         options={"require": ["sub", "exp", "iat", "aud", "iss"]},
+        # Google's clock and ours can be a second or two apart, so a brand-new token can look like
+        # it was made "in the future". Allow up to 30 seconds of difference.
+        leeway=30,
     )
     return {"sub": claims["sub"], "role": "user", "email": claims.get("email")}
 

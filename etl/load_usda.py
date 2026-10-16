@@ -1,4 +1,5 @@
-"""Load the USDA food data into each service's own database, then print row counts.
+"""Load the food data (Australian AUSNUT 2023 first, then USDA) into each service's own database,
+then print row counts.
 
 Run it from the project folder (it runs inside a throwaway container, so you don't need
 any Python packages installed):
@@ -27,6 +28,7 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
+import ausnut
 import usda
 
 DATA_DIR = Path(os.getenv("USDA_DATA_DIR", Path(__file__).resolve().parent / "data"))
@@ -51,15 +53,27 @@ TABLES = {
 # ---------------------------------------------------------------- reading
 
 def read_all_foods(branded: int) -> list[dict]:
-    foods = []
+    ausnut_dir = DATA_DIR / "ausnut"
+    if not (ausnut_dir / ausnut.NUTRIENTS_FILE).exists():
+        sys.exit("Stopping: the Australian food data isn't downloaded. Run `python etl/download_ausnut.py` first.")
+    start = time.time()
+    print("- reading AUSNUT 2023 (Australian foods) ...", flush=True)
+    australian = ausnut.read_foods(ausnut_dir)
+    print(f"  {len(australian):,} foods ({time.time() - start:.0f}s)", flush=True)
+
+    found = {}
     for folder, data_type in [("foundation", "foundation_food"),
                               ("sr_legacy", "sr_legacy_food"),
                               ("fndds", "survey_fndds_food")]:
         start = time.time()
         print(f"- reading {folder} ...", flush=True)
-        found = usda.read_generic(DATA_DIR / folder, data_type)
-        print(f"  {len(found):,} foods ({time.time() - start:.0f}s)", flush=True)
-        foods += found
+        found[folder] = usda.read_generic(DATA_DIR / folder, data_type)
+        print(f"  {len(found[folder]):,} foods ({time.time() - start:.0f}s)", flush=True)
+
+    links = usda.sr_legacy_links(DATA_DIR)
+    filled = usda.fill_from_sr_legacy(found["foundation"], found["sr_legacy"], links)
+    print(f"- filled in {filled:,} missing Foundation values from the same foods in SR Legacy", flush=True)
+    foods = australian + found["foundation"] + found["sr_legacy"] + found["fndds"]
 
     if branded > 0:
         start = time.time()
@@ -136,8 +150,8 @@ def load_gap_db(conn):
     if not REFERENCE_CSV.exists():
         print(f"  (no {REFERENCE_CSV.name} found, skipping reference intakes)")
         return
-    columns = ["nutrient_key", "sex", "age_min", "age_max", "intake_type", "rni_or_ai",
-               "upper_limit", "unit", "source", "verified"]
+    columns = ["nutrient_key", "sex", "age_min", "age_max", "life_stage", "intake_type", "rni_or_ai",
+               "upper_limit", "sdt", "unit", "source", "verified"]
     with conn.cursor() as cur:
         with cur.copy(f"COPY reference_intakes ({', '.join(columns)}) FROM STDIN") as copy:
             for row in usda.read_csv(REFERENCE_CSV):

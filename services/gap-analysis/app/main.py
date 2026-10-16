@@ -1,10 +1,10 @@
-"""gap-analysis: for now this only has /health, /ready and /version. The real endpoints come in its own phase."""
+"""gap-analysis: people's profiles and targets, and finding the nutrients they're short on."""
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import config, db
+from app import config, db, routes
 from app.common import health_router, install_common, setup_logging
 
 setup_logging()
@@ -40,3 +40,4 @@ install_common(app)
 app.include_router(health_router)
 # ...and the same again under our path, so they can be reached through the gateway (the website footer uses /version)
 app.include_router(health_router, prefix=config.API_PREFIX)
+app.include_router(routes.router, prefix=config.API_PREFIX)

@@ -47,6 +47,6 @@ def test_meals_need_a_login():
 
 
 def test_expired_tokens_are_rejected():
-    expired = make_user_token(expires_in=-10)
+    expired = make_user_token(expires_in=-120)
     response = client.get("/api/meals/auth/me", headers={"Authorization": f"Bearer {expired}"})
     assert response.status_code == 401

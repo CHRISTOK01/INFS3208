@@ -7,13 +7,15 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- The list of foods people can search for (filled in by the data loader).
--- The nutrient values themselves are in nutrient_db. The two are matched up by fdc_id.
+-- The nutrient values themselves are in nutrient_db. The two are matched up by fdc_id, which is the
+-- USDA FoodData Central ID, or the 8-digit AUSNUT survey ID for Australian foods.
 CREATE TABLE food_catalogue (
     fdc_id           INTEGER PRIMARY KEY,
     name             TEXT NOT NULL,
     data_type        TEXT NOT NULL CHECK (data_type IN
-                         ('foundation_food', 'sr_legacy_food', 'survey_fndds_food', 'branded_food')),
-    -- Search order: 1 = Foundation, 2 = SR Legacy, 3 = FNDDS, 4 = Branded (lower numbers come first)
+                         ('ausnut_food', 'foundation_food', 'sr_legacy_food', 'survey_fndds_food', 'branded_food')),
+    -- Search order: 1 = Australian (AUSNUT), 2 = Foundation, 3 = SR Legacy, 4 = FNDDS, 5 = Branded
+    -- (lower numbers come first)
     search_rank      SMALLINT NOT NULL,
     category         TEXT,
     barcode          TEXT,

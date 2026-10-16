@@ -68,16 +68,29 @@ def nutrient_calc_day(user, day):
 
 # ---------------------------------------------------------------- foods
 
-def test_search_puts_generic_foods_first_and_is_cached(client):
+def test_search_puts_australian_foods_first_and_is_cached(client):
     first = client.get("/api/meals/foods/search?q=banana raw&limit=5")
     assert first.status_code == 200
     top = first.json()[0]
-    assert top["data_type"] in ("foundation_food", "sr_legacy_food")
+    assert top["data_type"] == "ausnut_food"
+    assert top["confidence"] == "complete micronutrient data"
     assert "banana" in top["name"].lower() and top["confidence"]
 
     second = client.get("/api/meals/foods/search?q=banana raw&limit=5")
     assert second.headers["X-Cache"] == "HIT"
     assert second.json() == first.json()
+
+
+@pytest.mark.parametrize("typed, expected", [
+    ("banana", "Banana, cavendish, peeled, raw"),       # the fresh fruit, not "Banana chip"
+    ("strawberries", "Strawberry, raw"),                # plural finds the singular Australian name
+    ("rice white boiled", "Rice, white, cooked"),       # "boiled" means cooked, not "parboiled"
+    ("baked beans", "Baked beans, canned in tomato sauce"),
+    ("peanut butter", "Peanut butter"),
+])
+def test_search_finds_what_people_mean(client, typed, expected):
+    top = client.get(f"/api/meals/foods/search?q={typed}&limit=3").json()[0]
+    assert top["name"].startswith(expected)
 
 
 def test_search_surfaces_cooked_foods_when_asked(client):

@@ -1,3 +1,4 @@
 # Checked: installs from ready-made Python 3.14 Linux packages (python:3.14-slim).
 psycopg[binary]==3.3.6
 pytest==9.1.1
+openpyxl==3.1.5

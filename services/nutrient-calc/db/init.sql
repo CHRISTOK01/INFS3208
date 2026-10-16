@@ -4,7 +4,8 @@
 -- The nutrients MacroScope keeps track of. The ids and keys here are our own, not USDA's.
 -- The `key` (like 'magnesium') is how the services refer to a nutrient when they talk to each other.
 -- When the data is loaded, each USDA nutrient is matched to one of these rows by its name and
--- unit in nutrient.csv, and every amount is converted into the unit listed here.
+-- unit in nutrient.csv, and every amount is converted into the unit listed here. Australian (AUSNUT)
+-- foods are matched by their column name instead.
 CREATE TABLE nutrient (
     id          SMALLINT PRIMARY KEY,
     key         TEXT NOT NULL UNIQUE,
@@ -32,8 +33,7 @@ INSERT INTO nutrient (id, key, name, unit, category, sort_order) VALUES
     (17, 'copper',         'Copper',             'mg',   'mineral', 17),
     (18, 'manganese',      'Manganese',          'mg',   'mineral', 18),
     (19, 'selenium',       'Selenium',           'ug',   'mineral', 19),
-    -- Iodine: USDA has a value for only about 0.3% of our foods, so a day's iodine is almost
-    -- always unknown. We still store what there is, but gap-analysis and the recommender skip it.
+    -- Iodine: every Australian (AUSNUT) food has it, but USDA has it for hardly any of its foods
     (20, 'iodine',         'Iodine',             'ug',   'mineral', 20),
     -- vitamins
     (30, 'vitamin_a',      'Vitamin A (RAE)',    'ug',   'vitamin', 30),
@@ -51,7 +51,12 @@ INSERT INTO nutrient (id, key, name, unit, category, sort_order) VALUES
     (42, 'choline',        'Choline',            'mg',   'vitamin', 42),
     -- other things worth watching, mainly so we can warn about having too much
     (50, 'saturated_fat',  'Saturated fat',      'g',    'other',   50),
-    (51, 'sugars',         'Total sugars',       'g',    'other',   51);
+    (51, 'sugars',         'Total sugars',       'g',    'other',   51),
+    -- these four only come from the Australian data (USDA has caffeine and alcohol too)
+    (52, 'free_sugars',    'Free sugars',        'g',    'other',   52),
+    (53, 'omega3_lc',      'Long chain omega-3', 'mg',   'other',   53),
+    (54, 'caffeine',       'Caffeine',           'mg',   'other',   54),
+    (55, 'alcohol',        'Alcohol',            'g',    'other',   55);
 
 -- How much of each nutrient is in 100 g of each food. Filled in by the data loader using COPY.
 -- If a food has no row for a nutrient, that means we DON'T KNOW (it was never measured).

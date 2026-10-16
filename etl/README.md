@@ -1,6 +1,20 @@
-# ETL: getting the USDA food data into the databases
+# ETL: getting the food data into the databases
 
-We don't keep the USDA files in git. The Branded foods file alone is about 3 GB once it's unzipped,
+MacroScope uses two sources of food data:
+
+- **Australian: AUSNUT 2023** from Food Standards Australia New Zealand (FSANZ). 3,741 foods as
+  Australians eat them, and every food has every nutrient (including iodine). These come first in
+  search. Copper, manganese and pantothenic acid aren't in AUSNUT, so they're taken from FSANZ's
+  Australian Food Composition Database (AFCD Release 3) for the foods it has. Licence: CC BY 4.0,
+  "Food Standards Australia New Zealand".
+- **US: USDA FoodData Central.** About 43,600 more foods, including 30,000 packaged products with
+  barcodes. Public domain (CC0). These fill in anything AUSNUT doesn't have.
+
+Why Australian first: the foods match what people here actually buy. Australian bread has iodised
+salt and added folic acid, for example, while US white rice and flour have added iron and folate
+that Australian ones don't. Using US data for an Australian user gets those nutrients wrong.
+
+We don't keep the data files in git. The Branded foods file alone is about 3 GB once it's unzipped,
 GitHub won't accept files over 100 MB, and the data is public anyway, so anyone can download it
 again. `etl/data/` is ignored by git (apart from an empty `.gitkeep` file that keeps the folder
 there). What's in the repo is the script that downloads the data.
@@ -8,6 +22,9 @@ there). What's in the repo is the script that downloads the data.
 ## 1. Download the data
 
 ```bash
+# Download the Australian data into etl/data/ausnut/ (about 6 MB)
+python etl/download_ausnut.py
+
 # Download all four USDA data sets and unzip them into etl/data/ (about 440 MB to download, 3 GB unzipped)
 python etl/download_usda.py
 
@@ -22,6 +39,7 @@ python etl/download_usda.py --force
 
 | Folder | Release | Download size | What we use it for |
 |---|---|---|---|
+| `etl/data/ausnut/` | AUSNUT 2023 and AFCD Release 3 (FSANZ) | about 6 MB | Australian foods with complete nutrient data, shown first in search |
 | `etl/data/foundation/` | Foundation Foods, 2026-04-30 | about 3 MB | the most detailed vitamin and mineral data, shown first in search |
 | `etl/data/sr_legacy/` | SR Legacy, 2018-04 (its last release) | about 5 MB | a wide range of everyday foods |
 | `etl/data/fndds/` | FNDDS, 2024-10-31 | about 3 MB | foods as people actually eat them, including mixed dishes |
@@ -71,19 +89,20 @@ their USDA `fdc_id`.
 | recommender_db | `foods` | one row per food: calories, macros, and the vitamins and minerals as JSON |
 | gap_db | `reference_intakes` | recommended daily intakes by age and sex, from `reference_intakes.csv` |
 
-### Row counts from the last full load (2026-10-15)
+### Row counts from the last full load (2026-10-16)
 
 | Database | Table | Rows |
 |---|---|---:|
-| meal_db | food_catalogue | 43,593 |
-| meal_db | food_portion | 61,307 |
-| nutrient_db | nutrient | 31 |
-| nutrient_db | food_nutrient | 726,232 |
-| gap_db | reference_intakes | 250 |
-| recommender_db | foods | 43,593 |
-| | **total** | **875,006** |
+| meal_db | food_catalogue | 47,334 |
+| meal_db | food_portion | 70,711 |
+| nutrient_db | nutrient | 35 |
+| nutrient_db | food_nutrient | 864,594 |
+| gap_db | reference_intakes | 432 |
+| recommender_db | foods | 47,334 |
+| | **total** | **1,030,440** |
 
-Foods by data set: 378 Foundation, 7,785 SR Legacy, 5,430 FNDDS and 30,000 Branded.
+Foods by data set: 3,741 Australian (AUSNUT 2023), 378 Foundation, 7,785 SR Legacy, 5,430 FNDDS
+and 30,000 Branded.
 
 ### How the data gets cleaned
 
@@ -96,6 +115,11 @@ Foods by data set: 378 Foundation, 7,785 SR Legacy, 5,430 FNDDS and 30,000 Brand
 - **Units** are converted into the unit nutrient-calc uses (g, mg, µg, kcal). Vitamin D in IU
   converts exactly (40 IU = 1 µg). Vitamin A in IU can't be converted to RAE exactly, so it's
   stored as unknown.
+- **Foundation foods borrow missing values from SR Legacy.** USDA only measured some nutrients for
+  its newer Foundation foods. Cooked chicken breast, for example, has no fibre, vitamin A, C, D or
+  K, or choline there. When a Foundation food has the same NDB number as an SR Legacy food (USDA's
+  own link between the two), any nutrient the Foundation food is missing is taken from the SR
+  Legacy one. Values the Foundation food does have are never replaced.
 - **Missing values are never stored as 0.** If a food has no value for a nutrient, there's no row
   for it, and the app treats it as unknown.
 - **Impossible values are thrown away**, like more than 100 g of something in 100 g of food, or
@@ -122,9 +146,9 @@ every run picks exactly the same ones.
 
 ### Recommended intakes
 
-`reference_intakes.csv` has the NHMRC recommended intakes by age and sex. **None of the values have
-been checked against the official tables yet** (they're all marked `verified = false`), and sodium
-is left empty on purpose. See [REFERENCE_INTAKES_TODO.md](REFERENCE_INTAKES_TODO.md) for the checklist.
+`reference_intakes.csv` has the NHMRC recommended intakes by age and sex. Every value has been
+checked against the official NHMRC tables. See [REFERENCE_INTAKES.md](REFERENCE_INTAKES.md) for how,
+and for why a few upper limits are left empty and how sodium is handled.
 
 ## Things to remember
 

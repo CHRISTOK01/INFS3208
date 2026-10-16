@@ -95,3 +95,24 @@ def test_reads_fndds_style_nutrient_numbers(tmp_path):
         ["1", "300", "304", "25"],
     ])
     assert usda.read_nutrients(tmp_path, {300}) == {300: {"magnesium": 25}}
+
+
+# ---------------------------------------------------------------- filling Foundation gaps from SR Legacy
+
+def test_links_foundation_to_sr_legacy_by_ndb_number(tmp_path):
+    (tmp_path / "foundation").mkdir()
+    (tmp_path / "sr_legacy").mkdir()
+    write_csv(tmp_path / "foundation" / "foundation_food.csv", ["fdc_id", "NDB_number", "footnote"],
+              [["331960", "5746", ""], ["999", "123456", ""]])
+    write_csv(tmp_path / "sr_legacy" / "sr_legacy_food.csv", ["fdc_id", "NDB_number"], [["171140", "5746"]])
+    assert usda.sr_legacy_links(tmp_path) == {331960: 171140}    # 999 has no SR Legacy match
+
+
+def test_fills_only_missing_nutrients_from_sr_legacy():
+    chicken = usda.make_food(331960, "Chicken breast, braised", "foundation_food", None, None,
+                             {"energy": 166, "magnesium": 32}, [], 100)
+    old_chicken = usda.make_food(171140, "Chicken breast, braised", "sr_legacy_food", None, None,
+                                 {"energy": 151, "magnesium": 29, "vitamin_c": 0, "choline": 117}, [], 100)
+    filled = usda.fill_from_sr_legacy([chicken], [old_chicken], {331960: 171140})
+    assert filled == 2
+    assert chicken["nutrients"] == {"energy": 166, "magnesium": 32, "vitamin_c": 0, "choline": 117}

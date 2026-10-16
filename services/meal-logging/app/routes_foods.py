@@ -1,6 +1,6 @@
 """Finding foods: search, barcode lookup, and a food's portions. Served under /api/meals/foods.
 
-No login is needed here, because the food list is public USDA data.
+No login is needed here, because the food list is public data (FSANZ and USDA).
 """
 from typing import Literal
 
@@ -26,22 +26,23 @@ def search(
     limit: int = Query(default=20, ge=1, le=50),
     conn: Connection = Depends(get_conn),
 ):
-    """Search foods by name. If you say raw or cooked, foods that match come first.
+    """Search foods by name. If you say raw or cooked (as `state`, or in the search, like "rice
+    boiled"), foods that match come first.
 
     Results are cached in Redis. The X-Cache header says whether this answer came from the
     cache (HIT) or the database (MISS).
     """
-    words = foods.search_words(q)
-    if not words:
+    wanted = foods.understand_search(q, state)
+    if not wanted.words:
         raise HTTPException(422, "Search for at least one word of 2 or more letters")
 
-    key = f"search:{' '.join(words)}:{state}:{limit}"
+    key = f"search:{' '.join(q.lower().split())}:{wanted.state}:{limit}"
     results = cache.get_json(key)
     if results is not None:
         response.headers["X-Cache"] = "HIT"
         return results
 
-    results = [food_reply(f) for f in repo.search_foods(conn, words, state, limit)]
+    results = [food_reply(f) for f in repo.search_foods(conn, wanted, limit, q.lower())]
     cache.set_json(key, results, config.SEARCH_CACHE_SECONDS)
     response.headers["X-Cache"] = "MISS"
     return results

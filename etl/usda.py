@@ -12,6 +12,8 @@ A few quirks of the USDA files that this code deals with:
   - Amounts come in different units (G, MG, UG, IU). We convert everything to the unit
     nutrient-calc uses. If a value can't be converted exactly, we leave it as unknown.
   - Values that are impossible (like 150 g of protein in 100 g of food) are thrown away.
+  - Foundation foods are missing many vitamins that SR Legacy has for the same food, so we fill
+    those gaps from SR Legacy (see fill_from_sr_legacy).
 """
 import csv
 import random
@@ -60,17 +62,25 @@ NUTRIENTS = {
     "saturated_fat": ("g",  [("Fatty acids, total saturated", "G")]),
     # Older and newer releases spell this one differently
     "sugars":        ("g",  [("Total Sugars", "G"), ("Sugars, Total", "G")]),
+    "caffeine":      ("mg", [("Caffeine", "MG")]),
+    "alcohol":       ("g",  [("Alcohol, ethyl", "G")]),
+    # USDA doesn't have these two as single values, so they only come from the Australian data
+    "free_sugars":   ("g",  []),
+    "omega3_lc":     ("mg", []),
 }
 
 MACROS = ["energy", "protein", "carbs", "fat", "fibre"]
-VITAMINS_AND_MINERALS = [k for k in NUTRIENTS if k not in MACROS + ["saturated_fat", "sugars"]]
+# Things we track mainly to warn about having too much (or, for omega-3, too little)
+OTHER = ["saturated_fat", "sugars", "free_sugars", "omega3_lc", "caffeine", "alcohol"]
+VITAMINS_AND_MINERALS = [k for k in NUTRIENTS if k not in MACROS + OTHER]
 
 # A generic food counts as having "complete micronutrient data" if we know at least this many
-# of its 24 vitamins and minerals. Branded foods are always "label data only".
+# of its vitamins and minerals. Branded foods are always "label data only".
 FULL_MICROS_THRESHOLD = 15
 
 # How each USDA data type shows up in search (lower comes first)
-SEARCH_RANK = {"foundation_food": 1, "sr_legacy_food": 2, "survey_fndds_food": 3, "branded_food": 4}
+# Australian foods come first, because MacroScope is for people in Australia
+SEARCH_RANK = {"ausnut_food": 1, "foundation_food": 2, "sr_legacy_food": 3, "survey_fndds_food": 4, "branded_food": 5}
 
 GRAMS_PER_UNIT = {"G": 1.0, "MG": 1e-3, "UG": 1e-6}
 VITAMIN_D_UG_PER_IU = 0.025
@@ -230,9 +240,14 @@ def read_categories(folder: Path) -> dict[str, str]:
     return {}
 
 
+def has_full_micros(data_type: str, nutrients: dict) -> bool:
+    """Do we know enough of this food's vitamins and minerals to call its data complete?"""
+    known_micros = sum(k in nutrients for k in VITAMINS_AND_MINERALS)
+    return data_type != "branded_food" and known_micros >= FULL_MICROS_THRESHOLD
+
+
 def make_food(fdc_id, name, data_type, category, barcode, nutrients, portions, serving_g):
     """One cleaned-up food, ready to be loaded."""
-    known_micros = sum(k in nutrients for k in VITAMINS_AND_MINERALS)
     return {
         "fdc_id": fdc_id,
         "name": name,
@@ -241,7 +256,7 @@ def make_food(fdc_id, name, data_type, category, barcode, nutrients, portions, s
         "category": category,
         "barcode": barcode,
         "prep_state": prep_state(name),
-        "has_full_micros": data_type != "branded_food" and known_micros >= FULL_MICROS_THRESHOLD,
+        "has_full_micros": has_full_micros(data_type, nutrients),
         "nutrients": nutrients,
         "portions": portions,
         "typical_serving_g": serving_g,
@@ -272,6 +287,42 @@ def read_generic(folder: Path, data_type: str) -> list[dict]:
             food_portions[0][1] if food_portions else 100.0,
         ))
     return result
+
+
+# ---------------------------------------------------------------- filling gaps in Foundation foods
+
+def sr_legacy_links(data_dir: Path) -> dict[int, int]:
+    """Which SR Legacy food is the same as each Foundation food: {Foundation fdc_id: SR Legacy fdc_id}.
+
+    USDA gives foods in both data sets an "NDB number". A Foundation food with the same NDB number as
+    an SR Legacy food is the same food (USDA measured it again more recently).
+    """
+    sr_by_ndb = {r["NDB_number"]: int(r["fdc_id"]) for r in read_csv(data_dir / "sr_legacy" / "sr_legacy_food.csv")}
+    return {int(r["fdc_id"]): sr_by_ndb[r["NDB_number"]]
+            for r in read_csv(data_dir / "foundation" / "foundation_food.csv")
+            if r["NDB_number"] in sr_by_ndb}
+
+
+def fill_from_sr_legacy(foundation: list[dict], sr_legacy: list[dict], links: dict[int, int]) -> int:
+    """Fill in nutrients a Foundation food is missing, using USDA's SR Legacy values for the same food.
+
+    Foundation foods are newer, but USDA only measured some nutrients for them. Cooked chicken
+    breast, for example, has no fibre, vitamin A, C, D or K, or choline in Foundation, while the
+    SR Legacy entry for the same chicken has all of them. We only fill gaps: a value Foundation
+    does have is never replaced. Returns how many values were filled in.
+    """
+    sr_by_id = {f["fdc_id"]: f for f in sr_legacy}
+    filled = 0
+    for food in foundation:
+        sr_food = sr_by_id.get(links.get(food["fdc_id"]))
+        if sr_food is None:
+            continue
+        for key, amount in sr_food["nutrients"].items():
+            if key not in food["nutrients"]:
+                food["nutrients"][key] = amount
+                filled += 1
+        food["has_full_micros"] = has_full_micros(food["data_type"], food["nutrients"])
+    return filled
 
 
 # ---------------------------------------------------------------- Branded foods (a subset)

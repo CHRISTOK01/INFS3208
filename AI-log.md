@@ -190,3 +190,113 @@ problems found.
 - `docker-compose.yml`, `.env.example`, `README.md`, `docs/architecture.md`
 
 ---
+
+## 6. gap-analysis service
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Writing the third microservice, gap-analysis, which works out each person's
+targets and finds the nutrients they're short on.
+
+**Prompts Used:**
+- "now start on the next micro-service"
+
+**What Claude Code did and gave back:**
+- Checked that the units in the reference intakes match the units nutrient-calc uses (they all did).
+- Wrote the target maths: calories from the Mifflin-St Jeor equation x an activity factor,
+  adjusted for the goal (cut, maintain or bulk); protein per kg of body weight; fat as 30% of
+  calories; carbs as the rest; fibre, vitamins and minerals from the NHMRC table for the person's
+  age and sex. Each target records where it came from, and unchecked NHMRC values say so.
+- Wrote the gap rules: 7 and 14 day windows of full days before today; a day only counts for a
+  nutrient if at least 80% of the food has a value for it; at least 3 such days are needed;
+  "gap" below 70% of target, "excess" above the upper limit; iodine skipped. It also returns the
+  top 5 gaps and how many days met each target.
+- Wrote the endpoints: save/see a profile, see targets, today's intake and remaining macros, and
+  the gap report, which falls back to the last saved report (marked "stale") if nutrient-calc is down.
+- Reported two problems it found while testing with a real Google account, and fixed them: a
+  brand-new Google token was rejected because Google's clock was a fraction ahead (it added 30
+  seconds of leeway in all four services), and someone who only logged a little food would look
+  short on everything (it added a rule that a day needs at least half the calorie target logged).
+- Wrote 28 tests (target maths checked against hand-worked numbers, gap rules, and full
+  integration with nutrient-calc), and deleted the test account and its data afterwards.
+
+**Where the AI/MT Tool Was Used:**
+- `services/gap-analysis/` (`app/targets.py`, `app/gaps.py`, `app/repo.py`, `app/routes.py`, `app/nutrient_client.py`, `app/config.py`, `app/main.py`, `requirements.txt`, all tests)
+- `services/*/app/auth.py` (clock leeway), `services/nutrient-calc/tests/test_auth.py`, `services/meal-logging/tests/test_auth.py`
+- `README.md`, `docs/architecture.md`
+
+---
+
+## 7. Australian food data and personalised targets
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Switching the main food data to Australian data (FSANZ AUSNUT 2023), and
+rebuilding the profile and targets so they're worked out from published guidelines for each
+person, including pregnancy and breastfeeding.
+
+**Prompts Used:**
+- "I need the app to be good at knowing the nutrients for all the foods and also good at knowing like how much of whatever someone needs according to gender, height, weight and all. How can we make this all better and accurate"
+- "Yes switch to the australian database and make decisions that you think would make the system as useful and accurate as possible. I need you to ask about activity levels and all in the profile stuff and then research and figure out how much macros and micros and all people need. Make an option to select that you are pregnant on your profile so everything gets adjusted accordingly. Pretty much fine tune everything to be better and personalised as possible."
+
+**What Claude Code did and gave back:**
+- Explained where the app's numbers could be wrong (US data for Australian users, packaged foods
+  with label data only, missing pregnancy and diet options, unsourced protein numbers) and
+  suggested fixes in order.
+- Found that FSANZ's AUSNUT 2023 suits the app better than the AFCD it first suggested: 3,741
+  Australian foods with all 58 nutrients filled in, plus 9,816 portion sizes, under CC BY 4.0. It
+  wrote `download_ausnut.py` and `ausnut.py` to download and read the Excel files, took copper,
+  manganese and pantothenic acid from AFCD Release 3 for the same foods, and made Australian
+  foods come first in search, with USDA kept as a fallback (and for barcodes). It also added four
+  nutrients the Australian data has: free sugars, long chain omega-3, caffeine and alcohol.
+- Researched the targets from NHMRC's own pages (energy, protein, fats, the chronic disease
+  targets, and the pregnancy and breastfeeding tables for every vitamin and mineral), the NHMRC
+  2020 alcohol guidelines, FSANZ's caffeine advice and the WHO sugar guideline. It rebuilt
+  `reference_intakes.csv` with a script that read every number from the NHMRC tables, and checked
+  that the existing values were unchanged.
+- Rewrote the profile: date of birth, a lifestyle question with examples from NHMRC's table,
+  exercise sessions a week, goal (lose, maintain or gain), diet (omnivore, vegetarian, vegan), and
+  a due date or breastfeeding. Targets are now worked out for the date being looked at, so they
+  follow birthdays and trimesters. Each target says where it came from, and the reply includes
+  notes (for example about folic acid and iodine supplements in pregnancy, or B12 for vegans).
+- Explained the rules it chose (energy from BMR x NHMRC activity level, protein limits, the goal
+  adjustments and the safety rules for pregnancy) and the sources for each.
+- Updated the tests (new ones for every target rule, worked out by hand) and reloaded the data.
+
+**Where the AI/MT Tool Was Used:**
+- `etl/ausnut.py`, `etl/download_ausnut.py`, `etl/usda.py`, `etl/load_usda.py`, `etl/requirements.txt`, `etl/reference_intakes.csv`, `etl/REFERENCE_INTAKES.md`, `etl/README.md`, `etl/tests/test_ausnut.py`
+- `services/gap-analysis/` (`app/targets.py`, `app/gaps.py`, `app/repo.py`, `app/routes.py`, `db/init.sql`, all tests)
+- `services/nutrient-calc/db/init.sql`, `services/meal-logging/db/init.sql`, `services/meal-logging/app/foods.py`, `services/meal-logging/app/repo.py`, meal-logging tests
+- `README.md`, `docs/architecture.md`
+
+---
+
+## 9. Smarter food search
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Making food search find the food people mean, now that Australian and US foods
+are mixed together and named differently.
+
+**Prompts Used:**
+- "do the search fix first"
+
+**What Claude Code did and gave back:**
+- Checked whether AUSNUT's number of portions could show which foods are most common, and found
+  it couldn't (it would put brioche first for "bread"), so didn't use it.
+- Changed the search so that plural endings are cut off ("strawberries" finds "Strawberry, raw"),
+  cooking words like "boiled" or "grilled" mean "show cooked foods first" rather than having to be
+  in the name (unless the whole search is the start of a name, like "baked beans"), main entries
+  ("Banana, cavendish, raw") come before foods that only mention the word ("Banana chip"), FSANZ's
+  "not further defined" average foods come next, and raw foods come before cooked ones when no
+  choice is made.
+- Tried about 30 everyday searches against the real data after each change, and fixed the
+  problems it found on the way (raw foods weren't preferred because of how Postgres sorts empty
+  values, "boiled" matched "parboiled", "roast" didn't match "roasted").
+- Added unit tests for the new search rules and integration tests for five everyday searches.
+
+**Where the AI/MT Tool Was Used:**
+- `services/meal-logging/app/foods.py`, `app/repo.py`, `app/routes_foods.py`, `tests/test_foods.py`, `tests/test_integration.py`
+- `docs/architecture.md`
+
+---

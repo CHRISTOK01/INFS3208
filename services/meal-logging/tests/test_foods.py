@@ -1,4 +1,6 @@
 """Tests for the small food rules (portions, labels, search words, barcodes). No database needed."""
+import re
+
 import pytest
 from pydantic import ValidationError
 
@@ -17,6 +19,7 @@ def test_confidence_labels():
     assert foods.confidence_label("branded_food", False) == "label data only"
     assert foods.confidence_label("branded_food", True) == "label data only"
     assert foods.confidence_label("foundation_food", True) == "complete micronutrient data"
+    assert foods.confidence_label("ausnut_food", True) == "complete micronutrient data"
     assert foods.confidence_label("sr_legacy_food", False) == "partial micronutrient data"
 
 
@@ -25,6 +28,39 @@ def test_search_words():
     assert foods.search_words("milk, whole") == ["milk", "whole"]
     assert foods.search_words("a b  egg egg") == ["egg"]                 # single letters and repeats dropped
     assert foods.search_words("one two three four five six") == ["one", "two", "three", "four", "five"]
+
+
+def test_plural_endings_are_cut_so_both_forms_match():
+    assert foods.stem("bananas") == "banana"
+    assert foods.stem("strawberries") == "strawberr"      # in "strawberry" and "strawberries"
+    assert foods.stem("tomatoes") == "tomato"
+    assert foods.stem("peaches") == "peach"
+    assert foods.stem("hummus") == "hummu"                # still in "hummus"
+    assert foods.stem("glass") == "glass" and foods.stem("egg") == "egg"
+
+
+def test_cooking_words_become_a_cooked_preference():
+    search = foods.understand_search("rice white boiled", None)
+    assert search.words == ["rice", "white"] and search.state == "cooked" and search.cooking_word == "boiled"
+    assert search.all_words == ["rice", "white", "boiled"]
+
+
+def test_raw_becomes_a_raw_preference_and_state_setting_wins():
+    assert foods.understand_search("bananas raw", None).state == "raw"
+    assert foods.understand_search("chicken grilled", "raw").state == "raw"
+
+
+def test_a_search_of_only_a_cooking_word_keeps_it():
+    search = foods.understand_search("fried", None)
+    assert search.words == ["fried"] and search.cooking_word is None
+
+
+def test_main_entry_pattern():
+    pattern = re.compile(foods.main_entry_pattern(["banana"]), re.I)
+    assert pattern.search("Banana, cavendish, peeled, raw") and pattern.search("Bananas, raw")
+    assert not pattern.search("Banana chip") and not pattern.search("Eggplant, raw")
+    assert re.search(foods.main_entry_pattern(["peanut", "butter"]), "peanut butter, smooth")
+    assert not re.search(foods.main_entry_pattern(["egg"]), "eggplant, raw")
 
 
 def test_like_pattern_escapes_special_characters():

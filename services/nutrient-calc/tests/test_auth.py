@@ -1,11 +1,13 @@
 """Tests for checking login tokens. No database or internet needed (see conftest.py)."""
+import time
+
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
 from app.auth import check_user_access, decode_token
-from tests.conftest import make_service_token, make_user_token
+from tests.conftest import PROJECT, TEST_KEY, make_service_token, make_user_token
 
 
 def test_google_token_decodes_as_a_user():
@@ -14,8 +16,9 @@ def test_google_token_decodes_as_a_user():
 
 
 def test_expired_google_token_is_rejected():
+    # Expired 2 minutes ago: well past the 30 seconds we allow for clocks being slightly apart
     with pytest.raises(jwt.ExpiredSignatureError):
-        decode_token(make_user_token(expires_in=-10))
+        decode_token(make_user_token(expires_in=-120))
 
 
 def test_google_token_for_another_project_is_rejected():
@@ -55,3 +58,11 @@ def test_user_cannot_access_someone_elses_data():
 
 def test_service_token_can_access_any_user():
     check_user_access({"sub": "meal-logging", "role": "service"}, "abc123")  # should not raise
+
+
+def test_brand_new_token_from_a_slightly_fast_clock_is_accepted():
+    # Google's clock running a few seconds ahead of ours shouldn't lock anyone out
+    now = int(time.time()) + 5
+    claims = {"sub": "abc123", "aud": PROJECT, "iss": f"https://securetoken.google.com/{PROJECT}",
+              "iat": now, "exp": now + 3600}
+    assert decode_token(jwt.encode(claims, TEST_KEY, algorithm="RS256"))["sub"] == "abc123"

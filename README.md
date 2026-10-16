@@ -1,8 +1,8 @@
 # MacroScope
 
 MacroScope helps you find the nutrients your diet is missing. You log what you eat, and it shows
-your calories, protein, carbs, fat, fibre and about 25 vitamins and minerals against your own
-targets. It spots the nutrients you're often short on over the last 7 and 14 days, and suggests
+your calories, protein, carbs, fat, fibre and over 20 vitamins and minerals against targets made
+for you (from your age, sex, size, activity, goal, diet, and pregnancy or breastfeeding). It spots the nutrients you're often short on over the last 7 and 14 days, and suggests
 foods that would help.
 
 > MacroScope gives estimates from food composition data. It isn't medical advice.
@@ -22,10 +22,11 @@ the right service. More detail on the design is in [docs/architecture.md](docs/a
 ## Progress
 
 - [x] Phase 1: project setup (Docker Compose, 4 databases, Redis, gateway)
-- [x] Phase 2: USDA food data loaded (875,006 rows)
+- [x] Phase 2: food data loaded: Australian (AUSNUT 2023) first, USDA as a fallback
 - [x] Phase 3a: nutrient-calc service
 - [x] Phase 3b: meal-logging service
-- [ ] Phase 3c and 3d: gap-analysis, food-recommender
+- [x] Phase 3c: gap-analysis service
+- [ ] Phase 3d: food-recommender
 - [ ] Phase 4: React frontend and demo users
 - [ ] Phase 5: load test and failure test
 - [ ] Phase 6: final README
@@ -61,7 +62,9 @@ docker compose up --build -d
 # 4. Check everything is running. After about 30 seconds, each one should say "healthy".
 docker compose ps
 
-# 5. Download the USDA food data into etl/data/ (about 440 MB, only needed once)
+# 5. Download the food data into etl/data/ (only needed once)
+#    The Australian data (about 6 MB) and the USDA data (about 440 MB)
+python etl/download_ausnut.py
 python etl/download_usda.py
 
 # 6. Load the food data into the databases (takes about 5 minutes, only needed once)
@@ -143,6 +146,16 @@ the others.
 | Add up the nutrients in a list of foods | `POST /calculate` | yes |
 | Save or read a user's daily totals | `PUT /daily/{user_id}/{date}`, `GET /daily/{user_id}?start&end` | yes |
 
+**gap-analysis** (`/api/gaps/...`). `{user_id}` is your Google ID (`GET /api/meals/auth/me` shows it).
+
+| What | Endpoint | Login needed? |
+|---|---|---|
+| The choices for the sign-up form (lifestyles with descriptions, goals, diets) | `GET /profile-options` | no |
+| Save your details, and see the targets they lead to | `PUT /profile/{user_id}` | yes |
+| See your details, or your targets for a day and where each number came from | `GET /profile/{user_id}`, `GET /targets/{user_id}?date=` | yes |
+| A day's intake against your targets, and the calories and macros you have left | `GET /today/{user_id}?date=2026-10-16` | yes |
+| Your gaps and excesses over the last 7 and 14 days | `GET /report/{user_id}?date=2026-10-16` | yes |
+
 ## Trying out meal-logging
 
 First you need a login token from Google. Until the website exists (phase 4), you can get one
@@ -205,6 +218,41 @@ docker compose start nutrient-calc
 curl.exe -X POST http://localhost:8080/api/meals/meals/recalculate-pending -H "Authorization: Bearer $TOKEN"
 ```
 
+## Trying out gap-analysis
+
+Carry on in the same PowerShell window as above, so `$TOKEN` is still set.
+
+```powershell
+# Save your Google ID in $MYID
+$MYID = (curl.exe -s http://localhost:8080/api/meals/auth/me -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json).user_id
+
+# See the choices for the profile (the lifestyles have a description each)
+(curl.exe -s http://localhost:8080/api/gaps/profile-options | ConvertFrom-Json).lifestyle
+
+# Save your details. The reply has your targets, how they were worked out, and any notes.
+#   -X PUT  send a PUT request (save or replace)
+#   lifestyle                   what a normal day looks like (see the choices above)
+#   exercise_sessions_per_week  how many times a week you do 30-60 minutes of sport or hard exercise
+#   goal                        lose, maintain or gain
+#   diet                        omnivore, vegetarian or vegan (optional)
+#   due_date, pre_pregnancy_weight_kg, breastfeeding   only if they apply (optional)
+$reply = curl.exe -s -X PUT "http://localhost:8080/api/gaps/profile/$MYID" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{\"sex\":\"female\",\"date_of_birth\":\"2001-05-20\",\"height_cm\":165,\"weight_kg\":60,\"lifestyle\":\"seated_some_walking\",\"exercise_sessions_per_week\":2,\"goal\":\"maintain\"}' | ConvertFrom-Json
+$reply.situation
+$reply.targets | Format-Table nutrient_key, target_amount, upper_limit, aim, unit, source
+
+# How much energy and macros you have left today
+#   the ` before ? stops PowerShell treating the ? specially
+(curl.exe -s "http://localhost:8080/api/gaps/today/$MYID`?date=2026-10-16" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json).remaining
+
+# Your gaps over the last 7 days (it looks at the full days BEFORE the date you give)
+$report = curl.exe -s "http://localhost:8080/api/gaps/report/$MYID`?date=2026-10-16" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
+$report.windows[0].top_gaps
+$report.windows[0].nutrients | Format-Table nutrient_key, avg_intake, unit, pct_of_target, status
+```
+
+The report needs at least 3 days with food logged before it can say anything. Until then every
+nutrient shows "unknown". The demo users in phase 4 will come with weeks of meals already logged.
+
 ## Running the tests
 
 ```bash
@@ -219,6 +267,9 @@ docker compose run --rm -e INTEGRATION=1 nutrient-calc pytest -v
 # meal-logging's tests. The INTEGRATION=1 ones need the food data loaded and nutrient-calc running.
 #   -e INTEGRATION=1  turn on the tests that use the real databases, Redis and nutrient-calc
 docker compose run --rm -e INTEGRATION=1 meal-logging pytest -v
+
+# gap-analysis's tests. The INTEGRATION=1 ones need the reference intakes loaded and nutrient-calc running.
+docker compose run --rm -e INTEGRATION=1 gap-analysis pytest -v
 
 # Run the data loader's tests
 #   --entrypoint pytest  run pytest instead of the loader
@@ -252,11 +303,13 @@ docker compose start nutrient-db
 
 ## The data
 
-The food data comes from USDA FoodData Central (https://fdc.nal.usda.gov/download-datasets), which
-is public domain. It's too big for git, so the repo has a script to download it instead.
+The main food data is Australian: AUSNUT 2023 from Food Standards Australia New Zealand (3,741
+foods with complete nutrient data, CC BY 4.0). USDA FoodData Central (public domain) fills in
+everything else, including packaged foods with barcodes. The files are too big for git, so the
+repo has scripts to download them instead.
 
-The last load put **875,006 rows** into the databases, including 43,593 foods and 726,232 nutrient
-values. The full counts, and how the data is cleaned, are in [etl/README.md](etl/README.md).
+The last load put **1,030,440 rows** into the databases, including 47,334 foods and 864,594
+nutrient values. The full counts, and how the data is cleaned, are in [etl/README.md](etl/README.md).
 
 To look inside a database:
 
