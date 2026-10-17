@@ -1,4 +1,4 @@
-// The day at a glance, and the bigger picture over the last 7 or 14 days.
+// The day at a glance, and the bigger picture over the last 7 days.
 //
 //   [ Today: energy ring + macros        ] [ Your focus: biggest gaps ]
 //   [ Vitamins and minerals today (chart)                             ]
@@ -144,16 +144,16 @@ function TodayCard({ byKey, remaining, onGoTo }) {
 // ---------------------------------------------------------------- your focus: the biggest gaps
 
 function FocusCard({ report, names, onGoTo }) {
-  const fortnight = report.windows.find((w) => w.window_days === 14) || report.windows[0];
-  const rows = Object.fromEntries(fortnight.nutrients.map((n) => [n.nutrient_key, n]));
-  const top = fortnight.top_gaps.slice(0, 3);
-  const enoughDays = fortnight.days_logged === undefined || fortnight.days_logged >= 3;
+  const week = report.windows[0];      // the last 7 days
+  const rows = Object.fromEntries(week.nutrients.map((n) => [n.nutrient_key, n]));
+  const top = week.top_gaps.slice(0, 3);
+  const enoughDays = week.days_logged === undefined || week.days_logged >= 3;
 
   return (
     <div className="card focus-card">
       <div className="card-head">
-        <h2>Your focus</h2>
-        <span className="sub">last 14 days</span>
+        <h2>Your focus this week</h2>
+        <span className="sub">last 7 days</span>
       </div>
       {!enoughDays ? (
         <Empty icon="calendar" title="Not enough days yet">
@@ -178,10 +178,10 @@ function FocusCard({ report, names, onGoTo }) {
               );
             })}
           </div>
-          {fortnight.excesses.length > 0 && (
+          {week.excesses.length > 0 && (
             <p className="small muted" style={{ marginBottom: "1rem" }}>
               Over the limit:{" "}
-              {fortnight.excesses.map((k) => <span key={k} className="chip red" style={{ marginRight: "0.3rem" }}>{niceName(k, names)}</span>)}
+              {week.excesses.map((k) => <span key={k} className="chip red" style={{ marginRight: "0.3rem" }}>{niceName(k, names)}</span>)}
             </p>
           )}
           <button className="btn block" onClick={() => onGoTo("suggestions")}><Icon name="sparkle" /> Foods that would help</button>
@@ -382,11 +382,11 @@ function LimitsCard({ byKey, names, isToday }) {
   );
 }
 
-// ---------------------------------------------------------------- the 7 and 14 day report
+// ---------------------------------------------------------------- the 7-day report
 
 function ReportCard({ report, names }) {
-  const [size, setSize] = useState(14);
-  const period = report.windows.find((w) => w.window_days === size) || report.windows[0];
+  const period = report.windows[0];      // the last 7 days
+  const size = period.window_days;
   const rows = Object.fromEntries(period.nutrients.map((n) => [n.nutrient_key, n]));
   const groups = [["vitamin", "Vitamins"], ["mineral", "Minerals"], ["other", "Fibre, fats, sugar and more"]];
 
@@ -394,14 +394,13 @@ function ReportCard({ report, names }) {
     <div className="card">
       <div className="card-head">
         <div>
-          <h2>Your nutrient report</h2>
+          <h2>Your week</h2>
           <p className="sub">
             Daily averages over the {size} days before {niceDate(report.date).toLowerCase()}
             {period.days_logged !== undefined ? ` (${period.days_logged} with food logged)` : ""}.
             {report.date === todayString() ? " Today is added once it's over." : ""}
           </p>
         </div>
-        <Segmented value={size} onChange={setSize} options={[[7, "7 days"], [14, "14 days"]]} label="How many days" />
       </div>
 
       <div className="stack-sm" style={{ gap: "0.85rem" }}>

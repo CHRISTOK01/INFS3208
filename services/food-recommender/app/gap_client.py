@@ -24,7 +24,7 @@ def get(path: str, user_id: str, day: date) -> dict:
 
 
 def get_report(user_id: str, day: date) -> dict:
-    """Gaps over the 7 and 14 days before `day`."""
+    """Gaps over the 7 days before `day`."""
     return get("report", user_id, day)
 
 

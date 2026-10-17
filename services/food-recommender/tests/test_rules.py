@@ -184,11 +184,47 @@ def test_recommend_ranks_and_keeps_variety():
 
 def test_shortfalls_from_the_report():
     report = {"windows": [
-        {"window_days": 7, "top_gaps": [], "nutrients": []},
-        {"window_days": 14, "days_logged": 10, "top_gaps": ["iron"], "nutrients": [
-            {"nutrient_key": "iron", "unit": "mg", "avg_intake": 9.5, "target_amount": 18, "status": "gap"},
+        {"window_days": 7, "days_logged": 6, "top_gaps": ["iron"], "nutrients": [
+            {"nutrient_key": "iron", "unit": "mg", "avg_intake": 9.5, "target_amount": 18, "pct_of_target": 52.8, "status": "gap"},
             {"nutrient_key": "zinc", "unit": "mg", "avg_intake": 9, "target_amount": 8, "status": "ok"}]},
     ]}
     shortfalls, window, gaps = rules.shortfalls_from_report(report)
-    assert shortfalls == {"iron": 8.5} and window["days_logged"] == 10
+    assert shortfalls == {"iron": 8.5} and window["days_logged"] == 6
     assert gaps[0]["shortfall"] == 8.5
+
+
+def test_today_counts_everything_not_reached_yet():
+    rows = [
+        {"nutrient_key": "energy", "unit": "kcal", "amount": 800, "target_amount": 2000},     # a budget, not a gap
+        {"nutrient_key": "iron", "unit": "mg", "amount": 6, "target_amount": 18},
+        {"nutrient_key": "calcium", "unit": "mg", "amount": 1200, "target_amount": 1000},     # already reached
+        {"nutrient_key": "vitamin_d", "unit": "ug", "amount": None, "target_amount": 5},      # nothing yet
+        {"nutrient_key": "sodium", "unit": "mg", "amount": 900, "target_amount": None},       # only a limit
+    ]
+    shortfalls, top = rules.shortfalls_for_today(rows)
+    assert shortfalls == {"iron": 12, "vitamin_d": 5}
+    assert [g["nutrient_key"] for g in top] == ["vitamin_d", "iron"]      # furthest from the target first
+
+
+def test_explanations_say_what_the_percentage_is_of():
+    _, covers = rules.score(LENTILS, {"iron": 6.0})
+    assert "(50% of what you still need today)" in rules.explain(LENTILS, covers, UNITS, "of what you still need today")
+
+
+def test_only_the_top_nutrients_are_listed():
+    many = food("Spinach, boiled", 201, {k: 10 for k in ["iron", "magnesium", "calcium", "zinc", "folate", "vitamin_c"]})
+    shortfalls = {k: 10.0 for k in ["iron", "magnesium", "calcium", "zinc", "folate", "vitamin_c"]}
+    total, covers = rules.score(many, shortfalls)
+    picked = rules.recommend([many], shortfalls, UNITS, OMNIVORE, NO_LIMITS, 2000, 5)
+    assert total == 4.5                                     # all six count towards the score (75% each)...
+    assert len(picked[0]["covers"]) == rules.MAX_COVERS_SHOWN   # ...but only four are listed
+
+
+def test_today_leaves_out_nutrients_we_only_partly_know():
+    rows = [
+        {"nutrient_key": "copper", "unit": "mg", "amount": 0.3, "target_amount": 1.2, "coverage_pct": 40.0},
+        {"nutrient_key": "iron", "unit": "mg", "amount": 6, "target_amount": 18, "coverage_pct": 100.0},
+    ]
+    shortfalls, _ = rules.shortfalls_for_today(rows)
+    assert shortfalls == {"iron": 12}       # copper's 0.3 mg only counts 40% of the food, so we can't tell
+

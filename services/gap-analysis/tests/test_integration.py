@@ -88,8 +88,8 @@ def test_cannot_see_someone_elses_profile(client):
 def test_report_finds_the_magnesium_gap(client):
     reply = client.get(f"/api/gaps/report/{USER}?date={TODAY}", headers=login()).json()
     assert reply["stale"] is False
-    week, fortnight = reply["windows"]
-    assert week["window_days"] == 7 and fortnight["window_days"] == 14
+    [week] = reply["windows"]          # just the last 7 days
+    assert week["window_days"] == 7
     assert week["days_logged"] == 5
     magnesium = by_key(week["nutrients"])["magnesium"]
     assert magnesium["avg_intake"] == 79 and magnesium["status"] == "gap"

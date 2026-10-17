@@ -1,10 +1,10 @@
-"""Finding gaps: comparing what someone ate over the last 7 or 14 days with their targets.
+"""Finding gaps: comparing what someone ate over the last 7 days with their targets.
 Plain functions, no database, so they're easy to test.
 
 The rules:
   - Fibre, vitamins, minerals and omega-3 are checked against their targets, and things with only
     a limit (sodium, saturated fat, free sugars, alcohol, caffeine) against that limit. Calories and
-    macros are a daily budget (see today_vs_targets), not something you're "short" on over a fortnight.
+    macros are a daily budget (see today_vs_targets), not something you're "short" on over a week.
   - Every day with food logged counts. Days with nothing logged don't, because not logging isn't
     the same as not eating.
   - We need at least 3 days with data for a nutrient. With fewer, it's "unknown".

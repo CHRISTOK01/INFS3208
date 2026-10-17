@@ -1,4 +1,7 @@
-// Foods that would help fill your gaps, from food-recommender. Or good sources of any one nutrient.
+// Food ideas from food-recommender, three ways:
+//   Today       what would fill the most of what you still need to hit today's targets (the default)
+//   This week   what would help with what you've been short on over the last 7 days
+//   Rich in...  good sources of any one nutrient
 import { useEffect, useState } from "react";
 import { api, nutrientNames } from "../api.js";
 import Icon from "../components/Icon.jsx";
@@ -15,7 +18,7 @@ const GROUP_COLOURS = {
 };
 
 export default function Suggestions({ user, day }) {
-  const [mode, setMode] = useState("gaps");        // "gaps" or "nutrient"
+  const [mode, setMode] = useState("today");       // "today", "week" or "nutrient"
   const [nutrient, setNutrient] = useState("iron");
   const [choices, setChoices] = useState([]);
   const [result, setResult] = useState(null);
@@ -33,7 +36,7 @@ export default function Suggestions({ user, day }) {
   useEffect(() => {
     setResult(null);
     setError(null);
-    const extra = mode === "nutrient" ? `&nutrient=${nutrient}` : "";
+    const extra = mode === "nutrient" ? `&nutrient=${nutrient}` : `&period=${mode}`;
     api(`/api/recommend/foods/${user.uid}?date=${day}${extra}`).then(setResult).catch((e) => setError(e.message));
   }, [user, day, mode, nutrient]);
 
@@ -45,7 +48,7 @@ export default function Suggestions({ user, day }) {
           <p>Everyday Australian foods, scored on one standard serve, that fit the energy you have left today.</p>
         </div>
         <div className="row">
-          <Segmented value={mode} onChange={setMode} options={[["gaps", "For my gaps", "target"], ["nutrient", "Rich in...", "search"]]} label="What to suggest" />
+          <Segmented value={mode} onChange={setMode} options={[["today", "Today", "sun"], ["week", "This week", "calendar"], ["nutrient", "Rich in...", "search"]]} label="What to suggest" />
           {mode === "nutrient" && (
             <select className="input" style={{ width: "auto" }} value={nutrient} onChange={(e) => setNutrient(e.target.value)} aria-label="Nutrient">
               {choices.map((c) => <option key={c.nutrient_key} value={c.nutrient_key}>{niceName(c.nutrient_key, names)}</option>)}
@@ -60,17 +63,25 @@ export default function Suggestions({ user, day }) {
         <div className="card">
           <div className="summary">
             <div className="stack-sm">
-              <h2>{mode === "gaps" ? `What you're short on (last ${result.based_on.window_days ?? 14} days)` : `Good sources of ${niceName(nutrient, names).toLowerCase()}`}</h2>
-              {mode === "gaps" && result.gaps.length > 0 && (
+              <h2>
+                {mode === "today" && "To hit today's targets, you still need"}
+                {mode === "week" && "Over the last 7 days, you've been short on"}
+                {mode === "nutrient" && `Good sources of ${niceName(nutrient, names).toLowerCase()}`}
+              </h2>
+              {mode !== "nutrient" && result.gaps.length > 0 && (
                 <div className="gap-chips">
                   {result.gaps.map((g) => (
                     <span key={g.nutrient_key} className="chip coral num">
-                      {niceName(g.nutrient_key, names)} · {amount(g.shortfall)} {unit(g.unit)} a day short
+                      {niceName(g.nutrient_key, names)} · {amount(g.shortfall)} {unit(g.unit)} {mode === "today" ? "to go" : "a day short"}
                     </span>
                   ))}
                 </div>
               )}
-              {mode === "nutrient" && <p className="small muted">Scored against your whole daily target, whether you're short or not.</p>}
+              <p className="small muted">
+                {mode === "today" && "These are the furthest from their targets. The foods below are scored on everything you haven't reached yet today."}
+                {mode === "week" && "For catching up on a low week. This needs at least 3 days logged, and doesn't count today until it's over."}
+                {mode === "nutrient" && "Scored against your whole daily target, whether you're short or not."}
+              </p>
             </div>
             {result.energy_left_kcal !== null && (
               <div className="stat" style={{ minWidth: 170 }}>
@@ -95,7 +106,10 @@ export default function Suggestions({ user, day }) {
 
       {result && result.suggestions.length === 0 && (
         <div className="card">
-          <Empty icon={result.gaps.length === 0 ? "check" : "search"} title={result.gaps.length === 0 ? "No gaps to fill" : "No foods fit right now"}>
+          <Empty
+            icon={result.gaps.length === 0 && mode !== "nutrient" ? "check" : "search"}
+            title={result.gaps.length === 0 && mode !== "nutrient" ? (mode === "today" ? "Every target reached today" : "No gaps this week") : "No foods fit right now"}
+          >
             {result.notes[0]}
           </Empty>
         </div>

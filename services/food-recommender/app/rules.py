@@ -1,8 +1,12 @@
 """Choosing foods to fill someone's gaps. Plain functions, no database, so they're easy to test.
 
 How it works:
-  1. Start from what gap-analysis says the person is short on over the last 14 days, and how much
-     short they are each day (the "shortfall": target minus their average).
+  1. Work out the "shortfall" for each nutrient, one of two ways:
+       today  what's still needed to reach today's targets (target minus what's been eaten today),
+              for every vitamin, mineral, fibre and omega-3 not reached yet. This is the default,
+              because the aim is to hit your targets each day.
+       week   what gap-analysis says the person has been short on over the last 7 days (target
+              minus their daily average), for the biggest gaps. For catching up on a low week.
   2. Only Australian (AUSNUT) foods are considered, because FSANZ tags each one with its Australian
      Dietary Guidelines food group and says whether it's a "discretionary" (sometimes) food. We only
      suggest everyday foods the guidelines give a "standard serve" for, like 75 g of vegetables or
@@ -90,6 +94,16 @@ PREGNANCY_AVOID = re.compile(
     r"shark|flake|swordfish|broadbill|marlin|orange roughy|catfish)\b",
     re.IGNORECASE,
 )
+
+# Energy and the macros are a daily budget, not something food suggestions try to fill
+NOT_SUGGESTED_FOR = {"energy", "protein", "carbs", "fat"}
+# Each suggestion lists (and explains) at most this many nutrients, the ones it helps most with.
+# The score still counts every one.
+MAX_COVERS_SHOWN = 4
+# Gaps listed at the top of the page in "today" mode
+TODAY_TOP = 5
+# Today's total for a nutrient only counts if we know it for at least this much of the food
+MIN_COVERAGE_PCT = 80
 
 # A serve has to make up at least this much of one shortfall to be worth suggesting
 MIN_FILL = 0.10
@@ -244,14 +258,14 @@ def show_number(x: float) -> str:
     return f"{x:.2g}"
 
 
-def explain(food: dict, covers: list[dict], units: dict[str, str]) -> str:
+def explain(food: dict, covers: list[dict], units: dict[str, str], of_what: str = "of what you're short each day") -> str:
     """Something like "A standard serve (75 g) gives 2.5 mg of iron (31% of what you're short each
     day) and 36 mg of magnesium (24%), for 87 kcal."."""
     parts = []
-    for i, c in enumerate(covers):
+    for i, c in enumerate(covers[:MAX_COVERS_SHOWN]):
         unit = units.get(c["nutrient_key"], "").replace("ug", "µg")    # micrograms, written the usual way
         text = f"{show_number(c['amount'])} {unit} of {nice_name(c['nutrient_key'])}"
-        text += f" ({c['pct_of_shortfall']}% of what you're short each day)" if i == 0 else f" ({c['pct_of_shortfall']}%)"
+        text += f" ({c['pct_of_shortfall']}% {of_what})" if i == 0 else f" ({c['pct_of_shortfall']}%)"
         parts.append(text)
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
     kcal = serve_kcal(food)
@@ -279,7 +293,8 @@ def why_nothing_fits(foods: list[dict], situation: dict, today: dict[str, dict],
 
 
 def recommend(foods: list[dict], shortfalls: dict[str, float], units: dict[str, str],
-              situation: dict, today: dict[str, dict], energy_left: float | None, limit: int) -> list[dict]:
+              situation: dict, today: dict[str, dict], energy_left: float | None, limit: int,
+              of_what: str = "of what you're short each day") -> list[dict]:
     """Pick the best `limit` foods for these shortfalls (see the top of this file for the rules)."""
     budget = energy_budget(energy_left)
     scored = []
@@ -307,23 +322,48 @@ def recommend(foods: list[dict], shortfalls: dict[str, float], units: dict[str, 
             "serve_g": STANDARD_SERVES[food["adg_code"]],
             "kcal": serve_kcal(food),
             "score": total,
-            "covers": [{**c, "unit": units.get(c["nutrient_key"])} for c in covers],
-            "why": explain(food, covers, units),
+            "covers": [{**c, "unit": units.get(c["nutrient_key"])} for c in covers[:MAX_COVERS_SHOWN]],
+            "why": explain(food, covers, units, of_what),
         })
         if len(picked) == limit:
             break
     return picked
 
 
-def shortfalls_from_report(report: dict, window_days: int = 14) -> tuple[dict[str, float], dict, list[dict]]:
-    """The gaps from gap-analysis's report: {nutrient: how much short per day}, the window used, and
-    the gap rows (biggest first)."""
+def shortfalls_for_today(rows: list[dict]) -> tuple[dict[str, float], list[dict]]:
+    """What's still needed today, from gap-analysis's /today rows: {nutrient: how much more}, and
+    the TODAY_TOP furthest from their target (to show at the top of the page).
+
+    Every nutrient with a target that hasn't been reached counts, except energy and the macros.
+    Nothing eaten yet means the whole target is still needed. If we only know a nutrient for part
+    of today's food (under 80% by weight, the same rule as the weekly report), today's total is just
+    a minimum, so we can't tell what's still needed and leave it out. Unknown is never zero.
+    """
+    gaps = []
+    for n in rows:
+        key, goal = n["nutrient_key"], n["target_amount"]
+        if not goal or key in NOT_SUGGESTED_FOR:
+            continue
+        if n.get("coverage_pct") is not None and n["coverage_pct"] < MIN_COVERAGE_PCT:
+            continue
+        eaten = n["amount"] or 0
+        if eaten < goal:
+            gaps.append({"nutrient_key": key, "unit": n["unit"], "intake": n["amount"], "target_amount": goal,
+                         "shortfall": round(goal - eaten, 2), "pct_of_target": round(100 * eaten / goal)})
+    gaps.sort(key=lambda g: g["pct_of_target"])     # furthest from the target first
+    return {g["nutrient_key"]: g["shortfall"] for g in gaps}, gaps[:TODAY_TOP]
+
+
+def shortfalls_from_report(report: dict, window_days: int = 7) -> tuple[dict[str, float], dict, list[dict]]:
+    """The gaps from gap-analysis's 7-day report: {nutrient: how much short per day}, the window
+    used, and the gap rows (biggest first)."""
     window = next((w for w in report["windows"] if w["window_days"] == window_days), report["windows"][-1])
     rows = {n["nutrient_key"]: n for n in window["nutrients"]}
     gaps = []
     for key in window["top_gaps"]:
         n = rows[key]
         short = round(n["target_amount"] - n["avg_intake"], 2)
-        gaps.append({"nutrient_key": key, "unit": n["unit"], "avg_intake": n["avg_intake"],
-                     "target_amount": n["target_amount"], "shortfall": short})
+        gaps.append({"nutrient_key": key, "unit": n["unit"], "intake": n["avg_intake"],
+                     "target_amount": n["target_amount"], "shortfall": short,
+                     "pct_of_target": round(n["pct_of_target"])})
     return {g["nutrient_key"]: g["shortfall"] for g in gaps}, window, gaps

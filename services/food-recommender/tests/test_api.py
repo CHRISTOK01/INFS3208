@@ -44,8 +44,8 @@ TODAY = {
         {"nutrient_key": "sodium", "unit": "mg", "amount": 800, "target_amount": None, "upper_limit": 2000},
     ],
 }
-REPORT = {"stale": False, "windows": [{"window_days": 14, "days_logged": 12, "top_gaps": ["iron"], "nutrients": [
-    {"nutrient_key": "iron", "unit": "mg", "avg_intake": 10, "target_amount": 18, "status": "gap"}]}]}
+REPORT = {"stale": False, "windows": [{"window_days": 7, "days_logged": 6, "top_gaps": ["iron"], "nutrients": [
+    {"nutrient_key": "iron", "unit": "mg", "avg_intake": 10, "target_amount": 18, "pct_of_target": 55.6, "status": "gap"}]}]}
 FOODS = [
     # A standard serve of lentils is 75 g: 3 mg iron, 90 kcal
     {"fdc_id": 1, "name": "Lentil, brown, boiled", "adg_code": 204, "discretionary": False, "prep_state": "cooked",
@@ -77,12 +77,31 @@ def test_people_only_get_their_own_suggestions(fakes):
     assert client.get(URL, headers=login("someone-else")).status_code == 403
 
 
-def test_suggestions_fill_the_gap_and_respect_the_diet(fakes):
-    body = client.get(URL, headers=login()).json()
-    assert body["gaps"][0] == {"nutrient_key": "iron", "unit": "mg", "avg_intake": 10, "target_amount": 18, "shortfall": 8}
+def test_today_fills_what_is_still_needed_and_respects_the_diet(fakes):
+    body = client.get(URL, headers=login()).json()      # "today" is the default
+    assert body["based_on"] == {"period": "today"}
+    # 5 of the 18 mg eaten so far, so 13 mg to go
+    assert body["gaps"][0] == {"nutrient_key": "iron", "unit": "mg", "intake": 5, "target_amount": 18,
+                               "shortfall": 13, "pct_of_target": 28}
     assert [s["name"] for s in body["suggestions"]] == ["Lentil, brown, boiled"]     # no beef for a vegetarian
-    assert body["suggestions"][0]["why"] == "A standard serve (75 g) gives 3 mg of iron (38% of what you're short each day), for 90 kcal."
+    assert body["suggestions"][0]["why"] == "A standard serve (75 g) gives 3 mg of iron (23% of what you still need today), for 90 kcal."
     assert any("vegetarian" in note for note in body["notes"])
+
+
+def test_week_fills_the_gaps_from_the_last_7_days(fakes):
+    body = client.get(URL + "&period=week", headers=login()).json()
+    assert body["based_on"]["period"] == "week" and body["based_on"]["window_days"] == 7
+    # an average of 10 of the 18 mg, so 8 mg a day short
+    assert body["gaps"][0] == {"nutrient_key": "iron", "unit": "mg", "intake": 10, "target_amount": 18,
+                               "shortfall": 8, "pct_of_target": 56}
+    assert body["suggestions"][0]["why"] == "A standard serve (75 g) gives 3 mg of iron (38% of what you're short each day), for 90 kcal."
+
+
+def test_every_target_reached_today(fakes, monkeypatch):
+    full = {**TODAY, "nutrients": [{**TODAY["nutrients"][0], "amount": 20}, TODAY["nutrients"][1]]}
+    monkeypatch.setattr(gap_client, "get_today", lambda uid, day: full)
+    body = client.get(URL, headers=login()).json()
+    assert body["suggestions"] == [] and "every target" in body["notes"][0]
 
 
 def test_a_service_can_ask_for_anyone(fakes):
@@ -96,10 +115,10 @@ def test_foods_rich_in_one_nutrient(fakes):
     assert client.get(URL + "&nutrient=sodium", headers=login()).status_code == 400   # a limit, not a target
 
 
-def test_no_gaps_means_no_suggestions(fakes, monkeypatch):
+def test_a_week_with_no_gaps_means_no_suggestions(fakes, monkeypatch):
     monkeypatch.setattr(gap_client, "get_report", lambda uid, day: {"windows": [
-        {"window_days": 14, "top_gaps": [], "nutrients": []}]})
-    body = client.get(URL, headers=login()).json()
+        {"window_days": 7, "top_gaps": [], "nutrients": []}]})
+    body = client.get(URL + "&period=week", headers=login()).json()
     assert body["suggestions"] == [] and "No gaps" in body["notes"][0]
 
 

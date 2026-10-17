@@ -386,27 +386,37 @@ and running the failure tests.
 
 ---
 
-## 11. Fix: food suggestions empty after going over a limit
+## 11. Fixing and reworking food suggestions
 
 **AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
 
-**Purpose of Use:** Fixing food suggestions showing nothing once someone had gone over a daily limit.
+**Purpose of Use:** Fixing food suggestions showing nothing once someone had gone over a daily limit,
+and making suggestions aim at each day's targets, with a weekly view and a 7-day report.
 
 **Prompts Used:**
 - "The food suggestions arent seem to be working. It just says no foods fit right now, even when i do search foods rich in whatever too"
+- "Honestly I feel like the food recommendations should be a daily thing, like the goal should be to hit the targets each day. There should also be a weekly option to see what you should eat extra cause your low for that particular week. So maybe do today and 7 days (which needs 2-3 days of logging to work) rather than 7 and 14 days."
 
 **What Claude Code did and gave back:**
-- Reproduced it with a demo user: after one very salty, fatty meal, both "for my gaps" and "rich in"
+- Reproduced the empty suggestions with a demo user: after one very salty, fatty meal, every mode
   gave no foods. The rule "a serve can't take today's total over a limit" ruled out nearly every
   food once the person was already over on sodium, because nearly every food has some.
 - Changed the rule so that once someone is over a limit, a serve with up to 10% of that limit is
-  still allowed (a limit of zero, like alcohol in pregnancy, still allows none). After the same
-  meal there were 8 suggestions again, all light, low-salt foods.
-- When nothing fits, the reply now says why (for example "most foods would take you over your
-  limit for sodium today"), instead of a general note. Added tests for both.
+  still allowed (a limit of zero, like alcohol in pregnancy, still allows none). When nothing fits,
+  the reply now says why (for example "most foods would take you over your limit for sodium today").
+- Changed gap-analysis's report to cover only the last 7 days (still needing 3 days logged).
+- Gave food-recommender a `period` setting. `today` (the default) scores foods on everything not
+  reached yet today: target minus what's been eaten, for every vitamin, mineral, fibre and omega-3,
+  leaving out nutrients only known for part of today's food. `week` uses the 7-day report's gaps.
+  Each suggestion lists its top 4 nutrients, and the explanation says what the percentage is of.
+- Updated the website's Suggestions page (Today, This week and Rich in... options) and the
+  dashboard's focus card and report, checked it on a real account, and updated the tests, the demo
+  user script and the docs.
 
 **Where the AI/MT Tool Was Used:**
-- `services/food-recommender/app/rules.py`, `app/routes.py`, `tests/test_rules.py`
-- `docs/architecture.md`
+- `services/food-recommender/app/rules.py`, `app/routes.py`, `app/gap_client.py`, `tests/`
+- `services/gap-analysis/app/routes.py`, `app/gaps.py`, `tests/test_integration.py`
+- `frontend/src/pages/Suggestions.jsx`, `Dashboard.jsx`, `Login.jsx`
+- `etl/seed_demo_users.py`, `README.md`, `docs/architecture.md`
 
 ---

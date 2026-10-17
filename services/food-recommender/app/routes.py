@@ -1,6 +1,7 @@
 """The food-recommender API, served under /api/recommend (see main.py)."""
 import logging
 from datetime import date
+from typing import Literal
 
 import httpx2
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -37,16 +38,17 @@ def ask_gap_analysis(call, user_id: str, day: date) -> dict:
 def suggest_foods(
     user_id: str,
     day: date = Query(alias="date"),        # ?date=2026-10-16, the person's own today
+    period: Literal["today", "week"] = "today",
     nutrient: str | None = Query(default=None, description="just find foods rich in this one, e.g. iron"),
     limit: int = Query(default=8, ge=1, le=20),
     claims: dict = Depends(current_claims),
     conn: Connection = Depends(get_conn),
 ):
-    """Foods that would help fill this person's gaps from the last 14 days, and fit what they have
-    left today. Each one comes with a plain explanation.
+    """Foods that fit what this person has left today, each with a plain explanation.
 
-    With ?nutrient=iron it ignores the gaps and finds good sources of iron instead (the "shortfall"
-    is then the whole daily target).
+    period=today (the default): foods that fill the most of what's still needed to reach today's
+    targets. period=week: foods for what they've been short on over the last 7 days. With
+    ?nutrient=iron it finds good sources of iron instead (the "shortfall" is the whole daily target).
     """
     check_user_access(claims, user_id)
     today = ask_gap_analysis(gap_client.get_today, user_id, day)
@@ -58,22 +60,30 @@ def suggest_foods(
         if not target:
             raise HTTPException(400, f"{nutrient} has no daily target to aim for, so we can't suggest foods for it")
         shortfalls, gaps, based_on = {nutrient: target}, [], {"nutrient": nutrient}
+        of_what = "of your daily target"
+    elif period == "today":
+        shortfalls, gaps = rules.shortfalls_for_today(today["nutrients"])
+        based_on = {"period": "today"}
+        of_what = "of what you still need today"
     else:
         report = ask_gap_analysis(gap_client.get_report, user_id, day)
         shortfalls, window, gaps = rules.shortfalls_from_report(report)
-        based_on = {"window_days": window["window_days"], "days_logged": window.get("days_logged"),
+        based_on = {"period": "week", "window_days": window["window_days"], "days_logged": window.get("days_logged"),
                     "stale": report.get("stale", False)}
+        of_what = "of what you're short each day"
 
     energy_left = today["remaining"].get("energy")
     result = {"user_id": user_id, "date": day, "based_on": based_on, "gaps": gaps,
               "energy_left_kcal": energy_left, "suggestions": [], "notes": []}
     if not shortfalls:
-        result["notes"].append("No gaps in the last 14 days, so there's nothing to fill. "
-                               "Gaps need at least 3 days of logging to show up.")
+        result["notes"].append(
+            "You've reached every target for today. Nice work!" if based_on.get("period") == "today"
+            else "No gaps in the last 7 days, so there's nothing to catch up on. "
+                 "Gaps need at least 3 days of logging to show up.")
         return result
 
     foods = repo.candidate_foods(conn, list(shortfalls))
-    result["suggestions"] = rules.recommend(foods, shortfalls, units, today["situation"], targets, energy_left, limit)
+    result["suggestions"] = rules.recommend(foods, shortfalls, units, today["situation"], targets, energy_left, limit, of_what)
     result["notes"] = notes_for(today["situation"], shortfalls)
     if not result["suggestions"]:
         reason = rules.why_nothing_fits(foods, today["situation"], targets, energy_left)

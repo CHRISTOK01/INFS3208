@@ -3,8 +3,8 @@
 MacroScope helps you find the nutrients your diet is missing. You log what you eat, and it shows
 your calories, protein, carbs, fat, fibre and over 20 vitamins and minerals against targets made
 for you (from your age, sex, size, activity, goal, diet, and pregnancy or breastfeeding). It spots
-the nutrients you're often short on over the last 7 and 14 days, and suggests everyday foods that
-would help.
+what you still need to hit today's targets and what you've been short on over the last 7 days,
+and suggests everyday foods that would help.
 
 > MacroScope gives estimates from food composition data. It isn't medical advice.
 
@@ -118,12 +118,13 @@ The tabs:
 
 - **Dashboard**: today's energy and macros (and what's left), a chart of vitamins and minerals
   against your targets, your limits (sodium, saturated fat, sugar, alcohol, caffeine), and the
-  nutrients you've been short on over the last 7 or 14 days.
+  nutrients you've been short on over the last 7 days.
 - **Log food**: search foods (choose raw or cooked first), or type a barcode. Pick a household
   portion like "1 banana, medium", build up a meal and save it. Save meals as recipes and log them
   again in one click. Each food says how complete its data is.
-- **Suggestions**: everyday foods that would fill your gaps, each with a sentence saying why, or
-  good sources of any one nutrient.
+- **Suggestions**: everyday foods, each with a sentence saying why. **Today** fills the most of what
+  you still need to hit today's targets; **This week** helps with what you've been short on over
+  the last 7 days; **Rich in...** finds good sources of any one nutrient.
 - **My details**: your profile, including pregnancy and breastfeeding, and every target with where
   it comes from.
 
@@ -199,13 +200,14 @@ data; our services can ask about anyone, using their own short-lived service tok
 | Save your details, and see the targets they lead to | `PUT /profile/{user_id}` | yes |
 | See your details, or your targets for a day and where each number came from | `GET /profile/{user_id}`, `GET /targets/{user_id}?date=` | yes |
 | A day's intake against your targets, and the calories and macros you have left | `GET /today/{user_id}?date=2026-10-17` | yes |
-| Your gaps and excesses over the last 7 and 14 days | `GET /report/{user_id}?date=2026-10-17` | yes |
+| Your gaps and excesses over the last 7 days | `GET /report/{user_id}?date=2026-10-17` | yes |
 
 **food-recommender** (`/api/recommend/...`)
 
 | What | Endpoint | Login needed? |
 |---|---|---|
-| Foods that would fill your gaps from the last 14 days, and fit the calories you have left today | `GET /foods/{user_id}?date=2026-10-17` | yes |
+| Foods that fill the most of what you still need today, within the calories you have left | `GET /foods/{user_id}?date=2026-10-17` | yes |
+| Foods for what you've been short on over the last 7 days | `GET /foods/{user_id}?date=2026-10-17&period=week` | yes |
 | Good sources of one nutrient, gaps or not | `GET /foods/{user_id}?date=2026-10-17&nutrient=iron` | yes |
 
 Every service also has `GET /health` (is it running?), `GET /ready` (can it reach its database?)
@@ -250,10 +252,10 @@ curl.exe -X POST http://localhost:8080/api/meals/meals -H "Authorization: Bearer
 #   the ` before ? stops PowerShell treating the ? specially
 (curl.exe -s "http://localhost:8080/api/gaps/today/$MYID`?date=2026-10-17" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json).remaining
 
-# Your gaps over the last 14 days (it looks at the full days BEFORE the date you give)
+# Your gaps over the last 7 days (it looks at the full days BEFORE the date you give)
 $report = curl.exe -s "http://localhost:8080/api/gaps/report/$MYID`?date=2026-10-17" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
-$report.windows[1].top_gaps
-$report.windows[1].nutrients | Format-Table nutrient_key, avg_intake, unit, pct_of_target, status
+$report.windows[0].top_gaps
+$report.windows[0].nutrients | Format-Table nutrient_key, avg_intake, unit, pct_of_target, status
 
 # Foods that would help fill them, each with a reason
 $rec = curl.exe -s "http://localhost:8080/api/recommend/foods/$MYID`?date=2026-10-17" -H "Authorization: Bearer $TOKEN" | ConvertFrom-Json
@@ -323,7 +325,7 @@ docker kill macroscope-meal-logging-2
 # 2. nutrient-calc goes down completely
 docker compose stop nutrient-calc
 #    Result: on the website you can still search and log meals. They're saved and marked
-#    "totals pending". The dashboard shows the last saved 14-day report, marked as out of date,
+#    "totals pending". The dashboard shows the last saved 7-day report, marked as out of date,
 #    and says today's totals can't be worked out right now. Suggestions say the same.
 docker compose start nutrient-calc
 #    Then click "Update my totals" on the Log food page (or POST /api/meals/meals/recalculate-pending)

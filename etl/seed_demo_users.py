@@ -261,8 +261,8 @@ def seed_user(user: dict, today: date):
 
     # What gap-analysis makes of it
     _, report = call("GET", f"{GATEWAY}/api/gaps/report/{uid}?date={today}", token=token)
-    fortnight = next(w for w in report["windows"] if w["window_days"] == 14)
-    print(f"  {user['email']:30} {logged_days} days logged, 14-day gaps: {', '.join(fortnight['top_gaps']) or 'none'}")
+    week = report["windows"][0]       # the last 7 days
+    print(f"  {user['email']:30} {logged_days} days logged, gaps this week: {', '.join(week['top_gaps']) or 'none'}")
 
 
 def main():

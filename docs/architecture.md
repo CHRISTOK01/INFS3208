@@ -202,8 +202,9 @@ top of `app/targets.py`:
 Sex is asked as male or female only because the NHMRC tables and the calorie equation are split
 that way. Vitamin K and choline aren't tracked: the Australian food data doesn't have them.
 
-**The report** (`GET /api/gaps/report/{user}?date=...`) looks at the 7 and 14 full days before
-the given date. Today isn't included, because a half-logged day would make you look short on
+**The report** (`GET /api/gaps/report/{user}?date=...`) looks at the 7 full days before the given
+date: long enough to see a pattern, short enough to do something about this week. Each day on its
+own is handled by `GET /api/gaps/today/...`. Today isn't included, because a half-logged day would make you look short on
 everything. Fibre, vitamins, minerals and omega-3 are checked against their targets, and the things
 with only a limit (sodium, saturated fat, free sugars, alcohol, caffeine) against that limit.
 Calories and macros are a daily budget (`GET /api/gaps/today/...`). For each nutrient:
@@ -232,10 +233,18 @@ see that user's data. That way the user's own login token doesn't need to be pas
 
 ## food-recommender: suggesting foods
 
-`GET /api/recommend/foods/{user}?date=...` asks gap-analysis for two things: the report (what the
-person is short on over the last 14 days) and today (the calories they have left, what they've
-eaten so far against each limit, and their diet and pregnancy). It then picks foods from its own
-copy of the food data. All the rules are in `app/rules.py`.
+`GET /api/recommend/foods/{user}?date=...&period=today|week` works in one of two ways, because the
+aim is to hit your targets every day, with a weekly view for catching up:
+
+| `period` | What it fills | Where the "shortfall" comes from |
+|---|---|---|
+| `today` (the default) | everything you haven't reached yet today | target minus what you've eaten today, for every vitamin, mineral, fibre and omega-3 below its target. A nutrient we only know for under 80% of today's food is left out, because today's total is only a minimum |
+| `week` | what you've been short on lately | target minus your daily average over the last 7 days, for the biggest gaps in the report (needs 3 days logged) |
+
+Either way it asks gap-analysis for today (the calories left, what's been eaten so far against
+each limit, and the person's diet and pregnancy), and for `week` the 7-day report as well. It then
+picks foods from its own copy of the food data. All the rules are in `app/rules.py`. Each
+suggestion lists the 4 nutrients it helps most with, but its score counts all of them.
 
 **Only Australian (AUSNUT) foods are suggested.** FSANZ tags every AUSNUT food with its Australian
 Dietary Guidelines food group code (like 301 "Fresh/canned fruit") and says whether it's a
@@ -305,7 +314,7 @@ unknown path back to `index.html`, so reloading the page anywhere still works. `
 never cached and the other files have a fingerprint in their names, so a new version shows up
 straight away after a rolling update.
 
-**It copes with parts of the app being down.** The dashboard asks for today and the 14-day report
+**It copes with parts of the app being down.** The dashboard asks for today and the 7-day report
 separately, so if one fails the other still shows. A meal saved while nutrient-calc is down shows
 "totals pending", with a button to catch up. A report sent from the last saved results says it's
 out of date.

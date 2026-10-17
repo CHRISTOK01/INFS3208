@@ -67,8 +67,8 @@ def client():
 
 
 def test_suggests_everyday_foods_for_the_gaps(client):
-    body = client.get(URL, headers=login()).json()
-    assert body["based_on"]["window_days"] == 14 and body["based_on"]["days_logged"] == 5
+    body = client.get(URL + "&period=week", headers=login()).json()
+    assert body["based_on"]["window_days"] == 7 and body["based_on"]["days_logged"] == 5
     gap_keys = {g["nutrient_key"] for g in body["gaps"]}
     assert {"vitamin_b12", "vitamin_d"} <= gap_keys
     suggestions = body["suggestions"]

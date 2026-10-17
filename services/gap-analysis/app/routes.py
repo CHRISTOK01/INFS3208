@@ -19,7 +19,9 @@ from app.db import get_conn
 log = logging.getLogger(config.SERVICE_NAME)
 router = APIRouter(tags=["gaps"])
 
-WINDOWS = (7, 14)
+# The report looks at the last 7 days: long enough to see a pattern, short enough to act on this
+# week. (Each day on its own is handled by /today.) It's a tuple so more windows can be added.
+WINDOWS = (7,)
 
 
 class Profile(BaseModel):
@@ -164,9 +166,9 @@ def report(
     claims: dict = Depends(current_claims),
     conn: Connection = Depends(get_conn),
 ):
-    """Gaps and excesses over the last 7 and 14 days.
+    """Gaps and excesses over the last 7 days.
 
-    The windows cover the full days BEFORE `day`, so a half-logged today doesn't make it look
+    The window covers the full days BEFORE `day`, so a half-logged today doesn't make it look
     like you're short on everything. If nutrient-calc is down, you get the last saved report,
     marked "stale".
     """

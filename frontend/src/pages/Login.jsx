@@ -6,7 +6,7 @@ import { Callout, Segmented } from "../components/ui.jsx";
 
 const FEATURES = [
   ["target", "Targets made for you", "From the Australian NHMRC values, for your age, size, activity, diet and pregnancy."],
-  ["search", "Spot what's missing", "See which vitamins and minerals you're often short on, over 7 and 14 days."],
+  ["search", "Spot what's missing", "See what you still need today, and what you've been short on this week."],
   ["sparkle", "Food ideas that fit", "Everyday Australian foods that fill your gaps, within the energy you have left."],
 ];
 
