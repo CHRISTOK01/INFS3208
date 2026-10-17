@@ -1,0 +1,313 @@
+# The 4 PostgreSQL databases, one per service, exactly like the 4 database containers in Docker
+# Compose. No service ever talks to another service's database.
+#
+# Each one is a StatefulSet with 1 pod, because a database needs to keep its data and its name:
+#   - the pod is always called <name>-0 (like meal-db-0), and a "headless" Service gives it the
+#     stable address <name> (like meal-db:5432) that its service connects to
+#   - volumeClaimTemplates gives it its own 5 GB Google persistent disk. If the pod is deleted or
+#     moved to the other node, the new pod gets the same disk back, so no data is lost.
+#
+# The tables are created by each service's db/init.sql, which Postgres runs the first time it
+# starts with an empty disk. Those files are put into ConfigMaps (<name>-init) by a command in
+# k8s/README.md, so the SQL isn't copied in two places. The passwords come from the
+# macroscope-secrets Secret, also made in k8s/README.md.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meal-db
+  namespace: macroscope
+spec:
+  clusterIP: None          # "headless": the name points straight at the database pod
+  selector:
+    app: meal-db
+  ports:
+    - port: 5432
+---
+# Meal logging database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: meal-db
+  namespace: macroscope
+spec:
+  serviceName: meal-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meal-db
+  template:
+    metadata:
+      labels:
+        app: meal-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18
+          env:
+            - name: POSTGRES_DB
+              value: meal_db
+            - name: POSTGRES_USER
+              value: meal
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: meal-db-password
+          ports:
+            - containerPort: 5432
+          # Only send connections once the database accepts them
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "meal", "-d", "meal_db"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            # Postgres 18 keeps its data in /var/lib/postgresql/18/docker, so the disk goes on the folder above
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: meal-db-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutrient-db
+  namespace: macroscope
+spec:
+  clusterIP: None          # "headless": the name points straight at the database pod
+  selector:
+    app: nutrient-db
+  ports:
+    - port: 5432
+---
+# Nutrient calc database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nutrient-db
+  namespace: macroscope
+spec:
+  serviceName: nutrient-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nutrient-db
+  template:
+    metadata:
+      labels:
+        app: nutrient-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18
+          env:
+            - name: POSTGRES_DB
+              value: nutrient_db
+            - name: POSTGRES_USER
+              value: nutrient
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: nutrient-db-password
+          ports:
+            - containerPort: 5432
+          # Only send connections once the database accepts them
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "nutrient", "-d", "nutrient_db"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            # Postgres 18 keeps its data in /var/lib/postgresql/18/docker, so the disk goes on the folder above
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: nutrient-db-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gap-db
+  namespace: macroscope
+spec:
+  clusterIP: None          # "headless": the name points straight at the database pod
+  selector:
+    app: gap-db
+  ports:
+    - port: 5432
+---
+# Gap analysis database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gap-db
+  namespace: macroscope
+spec:
+  serviceName: gap-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gap-db
+  template:
+    metadata:
+      labels:
+        app: gap-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18
+          env:
+            - name: POSTGRES_DB
+              value: gap_db
+            - name: POSTGRES_USER
+              value: gap
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: gap-db-password
+          ports:
+            - containerPort: 5432
+          # Only send connections once the database accepts them
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "gap", "-d", "gap_db"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            # Postgres 18 keeps its data in /var/lib/postgresql/18/docker, so the disk goes on the folder above
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: gap-db-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommender-db
+  namespace: macroscope
+spec:
+  clusterIP: None          # "headless": the name points straight at the database pod
+  selector:
+    app: recommender-db
+  ports:
+    - port: 5432
+---
+# Food recommender database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: recommender-db
+  namespace: macroscope
+spec:
+  serviceName: recommender-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recommender-db
+  template:
+    metadata:
+      labels:
+        app: recommender-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18
+          env:
+            - name: POSTGRES_DB
+              value: recommender_db
+            - name: POSTGRES_USER
+              value: recommender
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: recommender-db-password
+          ports:
+            - containerPort: 5432
+          # Only send connections once the database accepts them
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "recommender", "-d", "recommender_db"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            # Postgres 18 keeps its data in /var/lib/postgresql/18/docker, so the disk goes on the folder above
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: recommender-db-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

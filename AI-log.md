@@ -420,3 +420,77 @@ and making suggestions aim at each day's targets, with a weekly view and a 7-day
 - `etl/seed_demo_users.py`, `README.md`, `docs/architecture.md`
 
 ---
+
+## 12. Deploying to Google Kubernetes Engine
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Getting guidance on deploying to GKE: the Kubernetes files, a step-by-step guide
+the student followed to do the deployment, and help fixing the Google sign-in setup when it didn't work.
+
+**Prompts Used:**
+- "Ive finished coding locally and its all done and all. Now I need to get to deploying: Here is some of the things I know I need to do: Need 2 VM's with the second being a duplicate of the first. Need the 4 databases. Need to implement the google sign in."
+- "actually just tell me exactly what to do on the GCP and ill do it cause I want to learn"
+- "ok start from what i need to do again from now onwards"
+- "i need the web client id and web client secret to enable the google thing"
+- "honeslty I need you to do this, I cant seem to get it working the google stuff. You may need to delete the stuff I did for the secret"
+- "Firebase: Error (auth/api-key-not-valid.-please-pass-a-valid-api-key.). I get this when i hit continue with google"
+- "can you delete all users on for me cause I want to sign up with my google and test everything. Also can I make the google work for everyone instead of just my account"
+- "what is this privacy page? its just the same as the normal link with no /privacy.html" and "i mean like what is it meant to do? like whats the point of this"
+
+**What Claude Code did and gave back:**
+- Asked the student to choose how to deploy (what "2 VMs" meant for the assignment, where the
+  databases should run, and what web address to use). The student chose a GKE cluster with 2 nodes,
+  the databases inside the cluster, and a free nip.io address with HTTPS.
+- Wrote the Kubernetes files in `k8s/` to match: the 4 Postgres databases as StatefulSets with
+  their own disks, Redis, the 4 services (2 pods each, spread across both nodes, health checks,
+  rolling updates), the website, autoscalers, and an HTTPS Ingress. Made each image carry its own
+  version so rolling updates show in the website footer.
+- Wrote `k8s/README.md`, a step-by-step guide with commented commands. The student ran the Google
+  Cloud steps themselves (the image registry, building and pushing the images, creating the cluster,
+  the IP address, settings and secrets, loading the data), asking about each problem along the way.
+  Explained and fixed the errors they hit, like a kubectl cp problem with Windows paths and an API key
+  pasted with extra characters.
+- When the student asked for help with Google sign-in, found what was wrong (the consent screen was
+  in Testing with no test users, localhost was missing from the authorized domains, and some origins
+  were missing from the OAuth client) and fixed those at their request. The student entered the
+  client secret themselves.
+- At the student's request and after they chose which accounts to remove, deleted the test accounts
+  and their data. Explained why Google needs a privacy policy before sign-in can be opened to
+  everyone, added a privacy page, and published the app when the student asked for Google sign-in to
+  work for everyone.
+
+**Where the AI/MT Tool Was Used:**
+- `k8s/` (all files), `services/*/Dockerfile`, `README.md`
+- `frontend/public/privacy.html`, `frontend/Dockerfile`
+
+---
+
+## 13. Today or this week on the dashboard
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Letting the dashboard's focus card show today or this week, and simplifying the
+vitamins and minerals chart colours.
+
+**Prompts Used:**
+- "my focus thing says every target hit when i havent got enough carbs for the day (include macros too), also havent got enough pantothenic acid, mangenense or copper. Also on the hover popup for the vitamin and minerals, dont make it say like (from the 40% of todays food that has a value for it), just say the measurement like 1.2 of 1.7: 70.2%."
+- "Ok I need you to make an edit to the webpage. On the suggestions page, if you just have data for one day, it comes up with the recommendations and all to fill the gaps and all that, but on the home screen, it is limited to the weekly cycle. I need you to edit the your focus this week section so you can select the today and 7 day option (So i should be able to pick what i wanna see - cause i wanna get recommendations and analysis for today if i aint got enough data and all). Also with this some food has no value stuff, why is that grey and a seperate thing? Like just calculate the foods that have the value and put it into the under or over 70% category accordingly."
+
+**What Claude Code did and gave back:**
+- Gave the "Your focus" card a Today / This week switch. Today lists the nutrients furthest from
+  today's targets with how much is left to go; it opens on This week once 3 days are logged and on
+  Today before that. Its button opens Suggestions in the matching mode.
+- Removed the grey "some food has no value" colour from the chart: every bar is the total from the
+  foods that have a value, coloured by its percentage, and the pop-up just shows the amount, the
+  target and the percentage.
+- Made "Today" (on the focus card and in Suggestions) count energy and the macros, and use the
+  foods that have a value for nutrients like copper rather than leaving them out, so it only says
+  every target is reached when it really is. Suggestions can now fill protein, carbs and fat too.
+
+**Where the AI/MT Tool Was Used:**
+- `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Suggestions.jsx`, `frontend/src/App.jsx`
+- `services/food-recommender/app/rules.py`, `app/repo.py`, `tests/test_rules.py`, `docs/architecture.md`
+
+---
+

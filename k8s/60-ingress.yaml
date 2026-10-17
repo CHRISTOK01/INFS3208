@@ -1,0 +1,78 @@
+# The front door: Google's HTTPS load balancer, made from this Ingress. It does the job the Nginx
+# gateway does in Docker Compose: /api/<service>/... goes to that service, everything else to
+# the website, and the path isn't changed on the way.
+#
+#   - global-static-ip-name: the load balancer uses the fixed IP address we reserved (macroscope-ip),
+#     so the address doesn't change if the Ingress is recreated
+#   - managed-certificates: Google gets and renews a free HTTPS certificate for our nip.io address
+#     (nip.io turns a name like 34-1-2-3.nip.io into the IP 34.1.2.3, so we don't need to buy a domain)
+#   - each service's readiness check (/ready, or /health for the website) becomes the load
+#     balancer's health check, so it only sends requests to healthy pods
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: macroscope
+  namespace: macroscope
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: macroscope-ip
+    networking.gke.io/managed-certificates: macroscope-cert
+spec:
+  defaultBackend:
+    service:
+      name: frontend
+      port:
+        number: 80
+  rules:
+    - http:
+        paths:
+          - path: /api/meals
+            pathType: Prefix
+            backend:
+              service:
+                name: meal-logging
+                port:
+                  number: 8001
+          - path: /api/nutrients
+            pathType: Prefix
+            backend:
+              service:
+                name: nutrient-calc
+                port:
+                  number: 8002
+          - path: /api/gaps
+            pathType: Prefix
+            backend:
+              service:
+                name: gap-analysis
+                port:
+                  number: 8003
+          - path: /api/recommend
+            pathType: Prefix
+            backend:
+              service:
+                name: food-recommender
+                port:
+                  number: 8004
+---
+# The HTTPS certificate. The domain is filled in once the IP address is reserved (see k8s/README.md).
+# Google needs 15-60 minutes to issue it the first time.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: macroscope-cert
+  namespace: macroscope
+spec:
+  domains:
+    - 34-120-54-167.nip.io
+---
+# Sends http:// visitors to https://. It's switched on once the certificate is ready (see
+# k8s/README.md); before that, turning it on would make the site unreachable.
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: macroscope-https-redirect
+  namespace: macroscope
+spec:
+  redirectToHttps:
+    enabled: true

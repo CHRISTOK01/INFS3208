@@ -8,6 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv
 
+# The version this image reports at /version (and the website footer shows). It's set when the
+# image is built, e.g. docker build --build-arg APP_VERSION=1.1.0, so each image knows its own
+# version. That's what makes a rolling update or rollback visible.
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
+
 # Install the libraries before copying the code. Docker caches this step,
 # so changing the code doesn't mean reinstalling everything.
 COPY requirements.txt .

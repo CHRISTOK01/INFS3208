@@ -26,6 +26,7 @@ export default function App() {
   const [hasProfile, setHasProfile] = useState(null);  // null until we know
   const [tab, setTab] = useState("dashboard");
   const [day, setDay] = useState(todayString());
+  const [suggestMode, setSuggestMode] = useState("today");   // which mode Suggestions opens on
 
   useEffect(() => {
     startAuth(setUser).catch((error) => setSetupError(error.message));
@@ -47,7 +48,9 @@ export default function App() {
       });
   }, [user]);
 
-  function goTo(next) {
+  // Go to a tab. For Suggestions you can also say which mode to open on ("today" or "week").
+  function goTo(next, mode) {
+    if (mode) setSuggestMode(mode);
     setTab(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -74,7 +77,7 @@ export default function App() {
   } else if (tab === "log") {
     page = <LogMeal user={user} day={day} />;
   } else if (tab === "suggestions") {
-    page = <Suggestions user={user} day={day} />;
+    page = <Suggestions user={user} day={day} startMode={suggestMode} />;
   } else {
     page = <Dashboard user={user} day={day} onGoTo={goTo} />;
   }

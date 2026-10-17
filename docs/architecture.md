@@ -238,7 +238,7 @@ aim is to hit your targets every day, with a weekly view for catching up:
 
 | `period` | What it fills | Where the "shortfall" comes from |
 |---|---|---|
-| `today` (the default) | everything you haven't reached yet today | target minus what you've eaten today, for every vitamin, mineral, fibre and omega-3 below its target. A nutrient we only know for under 80% of today's food is left out, because today's total is only a minimum |
+| `today` (the default) | everything you haven't reached yet today | target minus what you've eaten today, for protein, carbs, fat, fibre and every vitamin, mineral and omega-3 below its target, using the foods that have a value for each. Energy isn't filled: it's the budget no suggestion may go over |
 | `week` | what you've been short on lately | target minus your daily average over the last 7 days, for the biggest gaps in the report (needs 3 days logged) |
 
 Either way it asks gap-analysis for today (the calories left, what's been eaten so far against

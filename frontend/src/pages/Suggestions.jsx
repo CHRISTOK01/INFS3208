@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { api, nutrientNames } from "../api.js";
 import Icon from "../components/Icon.jsx";
 import { Callout, Empty, Meter, Segmented, SkeletonCard } from "../components/ui.jsx";
-import { MACROS, amount, niceName, splitName, unit } from "../format.js";
+import { amount, niceName, splitName, unit } from "../format.js";
 
 // Each food group gets a colour, used for the strip along the top of its cards
 const GROUP_COLOURS = {
@@ -17,19 +17,19 @@ const GROUP_COLOURS = {
   "lean meats, fish, eggs, nuts, seeds and tofu": "plum",
 };
 
-export default function Suggestions({ user, day }) {
-  const [mode, setMode] = useState("today");       // "today", "week" or "nutrient"
+export default function Suggestions({ user, day, startMode = "today" }) {
+  const [mode, setMode] = useState(startMode);     // "today", "week" or "nutrient"
   const [nutrient, setNutrient] = useState("iron");
   const [choices, setChoices] = useState([]);
   const [result, setResult] = useState(null);
   const [names, setNames] = useState({});
   const [error, setError] = useState(null);
 
-  // The nutrients you can ask about: anything with a daily target except energy and the macros
+  // The nutrients you can ask about: anything with a daily target except energy
   useEffect(() => {
     nutrientNames().then(setNames);
     api(`/api/gaps/targets/${user.uid}?date=${day}`)
-      .then((t) => setChoices(t.targets.filter((r) => r.target_amount && !MACROS.slice(0, 4).includes(r.nutrient_key))))
+      .then((t) => setChoices(t.targets.filter((r) => r.target_amount && r.nutrient_key !== "energy")))
       .catch(() => {});
   }, [user, day]);
 

@@ -1,0 +1,46 @@
+# Redis, used only by meal-logging to cache food search results. It's just a cache, so nothing is
+# saved to disk: if the pod restarts, searches are slower for a moment until the cache fills again.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: macroscope
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: macroscope
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:8.8-alpine
+          # The same settings as Docker Compose: no saving to disk, at most 128 MB, and drop the
+          # least recently used entries when it's full
+          args: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 192Mi

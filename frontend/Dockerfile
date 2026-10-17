@@ -7,6 +7,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY index.html vite.config.js ./
 COPY src ./src
+# Plain files copied as they are, like privacy.html (Google's sign-in screen links to it)
+COPY public ./public
 RUN npm run build
 
 # Stage 2: a small Nginx image that just serves those files. Node isn't in the final image.

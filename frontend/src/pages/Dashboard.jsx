@@ -52,7 +52,7 @@ export default function Dashboard({ user, day, onGoTo }) {
 
       <div className="grid grid-hero">
         {errors.today ? <ErrorCard message={errors.today} /> : today ? <TodayCard byKey={byKey} remaining={today.remaining} onGoTo={onGoTo} /> : <SkeletonCard lines={6} />}
-        {errors.report ? <ErrorCard message={errors.report} /> : report ? <FocusCard report={report} names={names} onGoTo={onGoTo} /> : <SkeletonCard lines={4} />}
+        {errors.report ? <ErrorCard message={errors.report} /> : report ? <FocusCard report={report} today={today} names={names} onGoTo={onGoTo} /> : <SkeletonCard lines={4} />}
       </div>
 
       {today && <MicroCard rows={today.nutrients} names={names} nothingLogged={byKey.energy?.amount === null} />}
@@ -143,51 +143,107 @@ function TodayCard({ byKey, remaining, onGoTo }) {
 
 // ---------------------------------------------------------------- your focus: the biggest gaps
 
-function FocusCard({ report, names, onGoTo }) {
+// Everything with a target you haven't reached yet today, furthest from the target first:
+// energy, the macros, fibre, vitamins, minerals and omega-3. Amounts come from the foods that have
+// a value for each nutrient. (Things with only a limit, like sodium, aren't targets to reach.)
+function todaysGaps(rows) {
+  return rows
+    .filter((n) => n.target_amount && !LIMITS.includes(n.nutrient_key))
+    .map((n) => ({ ...n, pct: (100 * (n.amount ?? 0)) / n.target_amount }))
+    .filter((n) => n.pct < 100)
+    .sort((x, y) => x.pct - y.pct);
+}
+
+// "Your focus": what to work on, either today (what's still needed to hit today's targets) or this
+// week (what you've been short on over the last 7 days). Opens on the week once there are 3 days
+// to go on, and on today before that.
+function FocusCard({ report, today, names, onGoTo }) {
   const week = report.windows[0];      // the last 7 days
-  const rows = Object.fromEntries(week.nutrients.map((n) => [n.nutrient_key, n]));
-  const top = week.top_gaps.slice(0, 3);
   const enoughDays = week.days_logged === undefined || week.days_logged >= 3;
+  const [view, setView] = useState(enoughDays ? "week" : "today");
 
   return (
     <div className="card focus-card">
       <div className="card-head">
-        <h2>Your focus this week</h2>
-        <span className="sub">last 7 days</span>
+        <h2>Your focus</h2>
+        <Segmented value={view} onChange={setView} options={[["today", "Today"], ["week", "This week"]]} label="Today or this week" />
       </div>
-      {!enoughDays ? (
-        <Empty icon="calendar" title="Not enough days yet">
-          Log at least 3 days and we'll show what you're often short on.
-        </Empty>
-      ) : top.length === 0 ? (
-        <Empty icon="check" title="No gaps. Nice work!">Everything we can check is at least 70% of your target.</Empty>
-      ) : (
-        <>
-          <p className="small muted">You're often short on these. A little more each day would help.</p>
-          <div className="focus-list">
-            {top.map((key) => {
-              const n = rows[key];
-              return (
-                <div key={key} className="focus-item">
-                  <div className="top">
-                    <strong>{niceName(key, names)}</strong>
-                    <span className="num muted">{Math.round(n.pct_of_target)}% of target</span>
-                  </div>
-                  <Meter pct={n.pct_of_target} thick />
-                </div>
-              );
-            })}
-          </div>
-          {week.excesses.length > 0 && (
-            <p className="small muted" style={{ marginBottom: "1rem" }}>
-              Over the limit:{" "}
-              {week.excesses.map((k) => <span key={k} className="chip red" style={{ marginRight: "0.3rem" }}>{niceName(k, names)}</span>)}
-            </p>
-          )}
-          <button className="btn block" onClick={() => onGoTo("suggestions")}><Icon name="sparkle" /> Foods that would help</button>
-        </>
-      )}
+      {view === "today" ? <TodayFocus today={today} names={names} onGoTo={onGoTo} /> : <WeekFocus week={week} enoughDays={enoughDays} names={names} onGoTo={onGoTo} />}
     </div>
+  );
+}
+
+function TodayFocus({ today, names, onGoTo }) {
+  if (!today) return <SkeletonCard lines={3} />;
+  const nothingLogged = today.nutrients.find((n) => n.nutrient_key === "energy")?.amount === null;
+  const gaps = todaysGaps(today.nutrients);
+  if (nothingLogged) {
+    return (
+      <Empty icon="apple" title="Nothing logged today yet" action={<button className="btn small" onClick={() => onGoTo("suggestions", "today")}>Foods for today</button>}>
+        Log something and we'll show what you still need. Or get food ideas for a whole day now.
+      </Empty>
+    );
+  }
+  if (gaps.length === 0) {
+    return <Empty icon="check" title="Every target reached today">Nice work! Everything we can check has hit its target.</Empty>;
+  }
+  return (
+    <>
+      <p className="small muted">Still to go today, furthest from the target first.</p>
+      <div className="focus-list">
+        {gaps.slice(0, 3).map((n) => (
+          <div key={n.nutrient_key} className="focus-item">
+            <div className="top">
+              <strong>{niceName(n.nutrient_key, names)}</strong>
+              <span className="num muted">{amount(n.target_amount - (n.amount ?? 0))} {unit(n.unit)} to go</span>
+            </div>
+            <Meter pct={n.pct} thick />
+          </div>
+        ))}
+      </div>
+      <button className="btn block" onClick={() => onGoTo("suggestions", "today")}><Icon name="sparkle" /> Foods that would help today</button>
+    </>
+  );
+}
+
+function WeekFocus({ week, enoughDays, names, onGoTo }) {
+  const rows = Object.fromEntries(week.nutrients.map((n) => [n.nutrient_key, n]));
+  const top = week.top_gaps.slice(0, 3);
+  if (!enoughDays) {
+    return (
+      <Empty icon="calendar" title="Not enough days yet">
+        Log at least 3 days and we'll show what you're often short on. Switch to Today to see what you need now.
+      </Empty>
+    );
+  }
+  if (top.length === 0) {
+    return <Empty icon="check" title="No gaps this week. Nice work!">Everything we can check is at least 70% of your target.</Empty>;
+  }
+  return (
+    <>
+      <p className="small muted">You've been short on these over the last 7 days. A little more each day would help.</p>
+      <div className="focus-list">
+        {top.map((key) => {
+          const n = rows[key];
+          return (
+            <div key={key} className="focus-item">
+              <div className="top">
+                <strong>{niceName(key, names)}</strong>
+                <span className="num muted">{Math.round(n.pct_of_target)}% of target</span>
+              </div>
+              <Meter pct={n.pct_of_target} thick />
+            </div>
+          );
+        })}
+      </div>
+      {week.excesses.length > 0 && (
+        <p className="small muted" style={{ marginBottom: "1rem" }}>
+          Over the limit:{" "}
+          {week.excesses.map((k) => <span key={k} className="chip red" style={{ marginRight: "0.3rem" }}>{niceName(k, names)}</span>)}
+        </p>
+      )}
+      <button className="btn block" onClick={() => onGoTo("suggestions", "week")}><Icon name="sparkle" /> Foods for this week</button>
+    </>
   );
 }
 
@@ -223,10 +279,11 @@ function MicroCard({ rows, names, nothingLogged }) {
   const shown = rows.filter((r) => r.target_amount && !MACROS.includes(r.nutrient_key) && groupOf(r.nutrient_key, names) === kind);
 
   const colours = {
-    met: cssColour("--brand"), close: cssColour("--sky"), low: cssColour("--coral"), unknown: cssColour("--surface-3"),
+    met: cssColour("--brand"), close: cssColour("--sky"), low: cssColour("--coral"),
   };
+  // Every bar is the total from the foods that have a value for that nutrient, coloured by how
+  // close it is to the target
   function colourFor(r) {
-    if (r.amount !== null && r.coverage_pct !== null && r.coverage_pct < 80) return colours.unknown;   // partly unknown
     if ((r.pct_of_target ?? 0) >= 100) return colours.met;
     if ((r.pct_of_target ?? 0) >= 70) return colours.close;
     return colours.low;
@@ -258,8 +315,7 @@ function MicroCard({ rows, names, nothingLogged }) {
         callbacks: {
           label: (ctx) => {
             const r = shown[ctx.dataIndex];
-            const partial = r.coverage_pct !== null && r.coverage_pct < 80 ? " (some food has no value, so maybe more)" : "";
-            return `${amount(r.amount)} of ${amount(r.target_amount)} ${unit(r.unit)}: ${r.pct_of_target ?? 0}%${partial}`;
+            return `${amount(r.amount)} of ${amount(r.target_amount)} ${unit(r.unit)}: ${r.pct_of_target ?? 0}%`;
           },
         },
       },
@@ -286,7 +342,6 @@ function MicroCard({ rows, names, nothingLogged }) {
         <span><i style={{ background: colours.met }} />target met</span>
         <span><i style={{ background: colours.close }} />70% or more</span>
         <span><i style={{ background: colours.low }} />under 70%</span>
-        <span><i style={{ background: colours.unknown }} />some food has no value</span>
       </div>
     </div>
   );

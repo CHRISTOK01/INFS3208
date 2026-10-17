@@ -30,7 +30,8 @@ browser ──► gateway :8080 ──┬─ /               ─► frontend (Re
                             └─ /api/recommend  ─► food-recommender ─► recommender-db
 ```
 
-Everything runs on your own computer with Docker Compose. Kubernetes files come next.
+It runs on your own computer with Docker Compose, and on Google Kubernetes Engine (GKE) across 2 VMs.
+The cloud deployment is explained step by step in [k8s/README.md](k8s/README.md).
 
 ## What you need
 
@@ -391,6 +392,6 @@ frontend/            the React website, and the Nginx that serves it
 services/<name>/     one folder per service: code (app/), tests, database setup (db/init.sql)
 etl/                 downloads and loads the food data; seed_demo_users.py makes the demo users
 loadtest/            the load test
-k8s/                 Kubernetes files (next)
+k8s/                 Kubernetes files for GKE, and the guide to deploying (k8s/README.md)
 docs/                design notes
 ```

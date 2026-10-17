@@ -1,0 +1,386 @@
+# The 4 MacroScope services. Each one is a Deployment (2 identical pods to start with, more if the
+# autoscaler in 50-autoscaling.yaml adds them) and a Service that shares requests between them.
+#
+#   - Services call each other by name, like http://nutrient-calc:8002, the same as in Docker Compose.
+#   - Settings come from environment variables: the shared ones from the macroscope-config ConfigMap,
+#     the secret ones (JWT_SECRET and the database passwords) from the macroscope-secrets Secret.
+#   - Kubernetes checks /health to see if a pod is alive (and restarts it if not), and /ready to see
+#     if it can take requests (it needs its database). A pod that isn't ready gets no traffic.
+#   - Rolling updates start a new pod and wait until it's ready before stopping an old one
+#     (maxUnavailable: 0), so an update or rollback never drops requests.
+#   - topologySpreadConstraints puts the 2 pods on different nodes where it can, so if one VM
+#     goes down, the other copy keeps the service running.
+#   - The image tag is the version. To roll out v1.1.0:
+#       kubectl set image deployment/meal-logging meal-logging=<registry>/meal-logging:1.1.0 -n macroscope
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meal-logging
+  namespace: macroscope
+  annotations:
+    # Let Google's load balancer send traffic straight to the pods (container-native load balancing)
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  selector:
+    app: meal-logging
+  ports:
+    - port: 8001
+      targetPort: 8001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meal-logging
+  namespace: macroscope
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never go below the number of pods we asked for
+      maxSurge: 1            # start one new pod at a time
+  selector:
+    matchLabels:
+      app: meal-logging
+  template:
+    metadata:
+      labels:
+        app: meal-logging
+    spec:
+      terminationGracePeriodSeconds: 25
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: meal-logging
+      containers:
+        - name: meal-logging
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/meal-logging:1.0.0
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: macroscope-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: meal-db-password
+            # $(DB_PASSWORD) is filled in by Kubernetes from the line above
+            - name: DATABASE_URL
+              value: postgresql://meal:$(DB_PASSWORD)@meal-db:5432/meal_db
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: jwt-secret
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            - name: NUTRIENT_CALC_URL
+              value: http://nutrient-calc:8002
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8001
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          # Wait 5 seconds before shutting down, so the load balancer has stopped sending this
+          # pod new requests first. Then uvicorn finishes the ones it's handling.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutrient-calc
+  namespace: macroscope
+  annotations:
+    # Let Google's load balancer send traffic straight to the pods (container-native load balancing)
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  selector:
+    app: nutrient-calc
+  ports:
+    - port: 8002
+      targetPort: 8002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nutrient-calc
+  namespace: macroscope
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never go below the number of pods we asked for
+      maxSurge: 1            # start one new pod at a time
+  selector:
+    matchLabels:
+      app: nutrient-calc
+  template:
+    metadata:
+      labels:
+        app: nutrient-calc
+    spec:
+      terminationGracePeriodSeconds: 25
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: nutrient-calc
+      containers:
+        - name: nutrient-calc
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/nutrient-calc:1.0.0
+          ports:
+            - containerPort: 8002
+          envFrom:
+            - configMapRef:
+                name: macroscope-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: nutrient-db-password
+            # $(DB_PASSWORD) is filled in by Kubernetes from the line above
+            - name: DATABASE_URL
+              value: postgresql://nutrient:$(DB_PASSWORD)@nutrient-db:5432/nutrient_db
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: jwt-secret
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8002
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          # Wait 5 seconds before shutting down, so the load balancer has stopped sending this
+          # pod new requests first. Then uvicorn finishes the ones it's handling.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gap-analysis
+  namespace: macroscope
+  annotations:
+    # Let Google's load balancer send traffic straight to the pods (container-native load balancing)
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  selector:
+    app: gap-analysis
+  ports:
+    - port: 8003
+      targetPort: 8003
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gap-analysis
+  namespace: macroscope
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never go below the number of pods we asked for
+      maxSurge: 1            # start one new pod at a time
+  selector:
+    matchLabels:
+      app: gap-analysis
+  template:
+    metadata:
+      labels:
+        app: gap-analysis
+    spec:
+      terminationGracePeriodSeconds: 25
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: gap-analysis
+      containers:
+        - name: gap-analysis
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/gap-analysis:1.0.0
+          ports:
+            - containerPort: 8003
+          envFrom:
+            - configMapRef:
+                name: macroscope-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: gap-db-password
+            # $(DB_PASSWORD) is filled in by Kubernetes from the line above
+            - name: DATABASE_URL
+              value: postgresql://gap:$(DB_PASSWORD)@gap-db:5432/gap_db
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: jwt-secret
+            - name: NUTRIENT_CALC_URL
+              value: http://nutrient-calc:8002
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8003
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          # Wait 5 seconds before shutting down, so the load balancer has stopped sending this
+          # pod new requests first. Then uvicorn finishes the ones it's handling.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: food-recommender
+  namespace: macroscope
+  annotations:
+    # Let Google's load balancer send traffic straight to the pods (container-native load balancing)
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  selector:
+    app: food-recommender
+  ports:
+    - port: 8004
+      targetPort: 8004
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: food-recommender
+  namespace: macroscope
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never go below the number of pods we asked for
+      maxSurge: 1            # start one new pod at a time
+  selector:
+    matchLabels:
+      app: food-recommender
+  template:
+    metadata:
+      labels:
+        app: food-recommender
+    spec:
+      terminationGracePeriodSeconds: 25
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: food-recommender
+      containers:
+        - name: food-recommender
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/food-recommender:1.0.1
+          ports:
+            - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: macroscope-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: recommender-db-password
+            # $(DB_PASSWORD) is filled in by Kubernetes from the line above
+            - name: DATABASE_URL
+              value: postgresql://recommender:$(DB_PASSWORD)@recommender-db:5432/recommender_db
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: macroscope-secrets
+                  key: jwt-secret
+            - name: GAP_ANALYSIS_URL
+              value: http://gap-analysis:8003
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8004
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          # Wait 5 seconds before shutting down, so the load balancer has stopped sending this
+          # pod new requests first. Then uvicorn finishes the ones it's handling.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy · MacroScope</title>
+    <!-- A plain page (no React), so it loads on its own. Google's sign-in screen links here. -->
+    <style>
+      :root { --bg: #f6f4ee; --surface: #fff; --ink: #1c2620; --ink-2: #536059; --brand: #1f6b4f; --line: #e4e0d6; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #111613; --surface: #182019; --ink: #e7ece8; --ink-2: #a6b1aa; --brand: #5cc196; --line: #2a342d; }
+      }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      main { max-width: 720px; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+      article { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: clamp(1.25rem, 4vw, 2.5rem); }
+      h1 { font-family: Georgia, serif; margin: 0 0 0.25rem; }
+      h2 { font-size: 1.05rem; margin: 1.75rem 0 0.4rem; }
+      p, li { color: var(--ink-2); }
+      a { color: var(--brand); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article>
+        <h1>Privacy</h1>
+        <p>MacroScope is a university project (INFS3208, The University of Queensland). This page says what it keeps about you and why.</p>
+
+        <h2>What we keep</h2>
+        <ul>
+          <li><strong>Your login:</strong> your email address, and your name if you sign in with Google. Logins are handled by Google Cloud Identity Platform; MacroScope never sees your password.</li>
+          <li><strong>Your details:</strong> what you enter on "My details" (sex, date of birth, height, weight, activity, goal, diet, and pregnancy or breastfeeding if you choose to say).</li>
+          <li><strong>Your food:</strong> the meals and recipes you log, and the daily nutrient totals worked out from them.</li>
+        </ul>
+
+        <h2>Why</h2>
+        <p>Only to work out your targets, show how your eating compares with them, and suggest foods. Nothing is used for advertising, sold, or shared with anyone.</p>
+
+        <h2>Where it's kept</h2>
+        <p>In databases on Google Cloud in Sydney, Australia, that only MacroScope's own services can reach. The website keeps your login in your browser so you stay logged in, and nothing else.</p>
+
+        <h2>Deleting it</h2>
+        <p>You can delete any meal or recipe yourself in the app. To have your account and everything in it deleted, email <a href="mailto:christokachappilly@gmail.com">christokachappilly@gmail.com</a>.</p>
+
+        <h2>Not medical advice</h2>
+        <p>MacroScope gives estimates from food composition data. Talk to a doctor or dietitian about your diet, especially in pregnancy.</p>
+
+        <p><a href="/">← Back to MacroScope</a></p>
+      </article>
+    </main>
+  </body>
+</html>

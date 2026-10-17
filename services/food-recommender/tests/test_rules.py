@@ -220,11 +220,12 @@ def test_only_the_top_nutrients_are_listed():
     assert len(picked[0]["covers"]) == rules.MAX_COVERS_SHOWN   # ...but only four are listed
 
 
-def test_today_leaves_out_nutrients_we_only_partly_know():
+def test_today_counts_macros_and_partly_known_nutrients():
     rows = [
+        {"nutrient_key": "carbs", "unit": "g", "amount": 150, "target_amount": 310, "coverage_pct": 100.0},
         {"nutrient_key": "copper", "unit": "mg", "amount": 0.3, "target_amount": 1.2, "coverage_pct": 40.0},
-        {"nutrient_key": "iron", "unit": "mg", "amount": 6, "target_amount": 18, "coverage_pct": 100.0},
     ]
     shortfalls, _ = rules.shortfalls_for_today(rows)
-    assert shortfalls == {"iron": 12}       # copper's 0.3 mg only counts 40% of the food, so we can't tell
+    # copper is worked out from the 40% of the food that has a value for it
+    assert shortfalls == {"carbs": 160, "copper": 0.9}
 

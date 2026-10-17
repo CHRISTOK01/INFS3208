@@ -3,7 +3,8 @@
 How it works:
   1. Work out the "shortfall" for each nutrient, one of two ways:
        today  what's still needed to reach today's targets (target minus what's been eaten today),
-              for every vitamin, mineral, fibre and omega-3 not reached yet. This is the default,
+              for protein, carbs, fat, fibre and every vitamin, mineral and omega-3 not reached
+              yet. This is the default,
               because the aim is to hit your targets each day.
        week   what gap-analysis says the person has been short on over the last 7 days (target
               minus their daily average), for the biggest gaps. For catching up on a low week.
@@ -95,15 +96,14 @@ PREGNANCY_AVOID = re.compile(
     re.IGNORECASE,
 )
 
-# Energy and the macros are a daily budget, not something food suggestions try to fill
-NOT_SUGGESTED_FOR = {"energy", "protein", "carbs", "fat"}
+# Energy is the daily budget (no suggestion may go over what's left), not something to fill.
+# Protein, carbs and fat are filled like everything else.
+NOT_SUGGESTED_FOR = {"energy"}
 # Each suggestion lists (and explains) at most this many nutrients, the ones it helps most with.
 # The score still counts every one.
 MAX_COVERS_SHOWN = 4
 # Gaps listed at the top of the page in "today" mode
 TODAY_TOP = 5
-# Today's total for a nutrient only counts if we know it for at least this much of the food
-MIN_COVERAGE_PCT = 80
 
 # A serve has to make up at least this much of one shortfall to be worth suggesting
 MIN_FILL = 0.10
@@ -118,6 +118,7 @@ MIN_ENERGY_BUDGET_KCAL = 150
 LIMIT_ALLOWANCE = 0.10
 
 NAMES = {
+    "protein": "protein", "carbs": "carbohydrate", "fat": "fat",
     "fibre": "fibre", "calcium": "calcium", "iodine": "iodine", "iron": "iron", "magnesium": "magnesium",
     "phosphorus": "phosphorus", "potassium": "potassium", "selenium": "selenium", "zinc": "zinc",
     "copper": "copper", "manganese": "manganese", "vitamin_a": "vitamin A", "thiamin": "thiamin (B1)",
@@ -334,17 +335,14 @@ def shortfalls_for_today(rows: list[dict]) -> tuple[dict[str, float], list[dict]
     """What's still needed today, from gap-analysis's /today rows: {nutrient: how much more}, and
     the TODAY_TOP furthest from their target (to show at the top of the page).
 
-    Every nutrient with a target that hasn't been reached counts, except energy and the macros.
-    Nothing eaten yet means the whole target is still needed. If we only know a nutrient for part
-    of today's food (under 80% by weight, the same rule as the weekly report), today's total is just
-    a minimum, so we can't tell what's still needed and leave it out. Unknown is never zero.
+    Every nutrient with a target that hasn't been reached counts (protein, carbs, fat, fibre,
+    vitamins, minerals and omega-3), except energy. Nothing eaten yet means the whole target is
+    still needed. Today's amounts come from the foods that have a value for each nutrient.
     """
     gaps = []
     for n in rows:
         key, goal = n["nutrient_key"], n["target_amount"]
         if not goal or key in NOT_SUGGESTED_FOR:
-            continue
-        if n.get("coverage_pct") is not None and n["coverage_pct"] < MIN_COVERAGE_PCT:
             continue
         eaten = n["amount"] or 0
         if eaten < goal:
