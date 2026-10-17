@@ -29,6 +29,16 @@ def test_food_groups_come_from_the_first_digit_of_the_code():
     assert rules.food_group(80) is None and rules.food_group(None) is None
 
 
+def test_each_food_gets_a_short_label():
+    assert rules.food_kind(508) == "Nuts & seeds"        # chia seeds, almonds
+    assert rules.food_kind(5011) == "Meat" and rules.food_kind(5031) == "Poultry"
+    assert rules.food_kind(505) == "Fish & seafood" and rules.food_kind(506) == "Eggs"
+    assert rules.food_kind(5072) == "Tofu & tempeh"
+    assert rules.food_kind(204) == "Legumes" and rules.food_kind(201) == "Vegetables"
+    assert rules.food_kind(301) == "Fruit" and rules.food_kind(1022) == "Grains"
+    assert rules.food_kind(4026) == "Dairy" and rules.food_kind(4037) == "Plant milk"
+
+
 def test_animal_sources():
     assert rules.animal_source(5011) == rules.animal_source(5041) == "meat"
     assert rules.animal_source(505) == "fish" and rules.animal_source(506) == "egg"

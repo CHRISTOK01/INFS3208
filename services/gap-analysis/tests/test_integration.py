@@ -71,8 +71,8 @@ def test_saving_a_profile_works_out_the_targets(client):
     assert reply.status_code == 200
     # The targets for the test's "today", when she was 25
     targets = by_key(client.get(f"/api/gaps/targets/{USER}?date={TODAY}", headers=login()).json()["targets"])
-    # BMR 600 + 1031.25 - 125 - 161 = 1345.25, x 1.65 = 2219.7, rounded to 2220 kcal
-    assert targets["energy"]["target_amount"] == 2220
+    # BMR 600 + 1031.25 - 125 - 161 = 1345.25, x 1.55 = 2085.1, rounded to 2090 kcal
+    assert targets["energy"]["target_amount"] == 2090
     # From the NHMRC table for women aged 19 to 30
     assert targets["magnesium"]["target_amount"] == 310
     assert targets["iodine"]["target_amount"] == 150
@@ -100,7 +100,7 @@ def test_report_finds_the_magnesium_gap(client):
 def test_today_shows_whats_left(client):
     put_day(TODAY, [{"fdc_id": SPINACH, "grams": 200}])     # 46 kcal so far today
     reply = client.get(f"/api/gaps/today/{USER}?date={TODAY}", headers=login()).json()
-    assert reply["remaining"]["energy"] == 2220 - 46
+    assert reply["remaining"]["energy"] == 2090 - 46
     assert by_key(reply["nutrients"])["magnesium"]["amount"] == 158
 
 

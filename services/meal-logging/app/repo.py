@@ -146,6 +146,23 @@ def delete_meal(conn: Connection, meal_id: int):
     conn.execute("DELETE FROM meals WHERE id = %s", (meal_id,))  # its items go too (ON DELETE CASCADE)
 
 
+def get_meal_item(conn: Connection, meal_id: int, item_id: int) -> dict | None:
+    """One item, but only if it's in that meal."""
+    return conn.execute(
+        "SELECT id, meal_id, fdc_id, grams, state, portion_desc FROM meal_items WHERE id = %s AND meal_id = %s",
+        (item_id, meal_id),
+    ).fetchone()
+
+
+def update_meal_item(conn: Connection, item_id: int, grams: float, portion_desc: str | None):
+    """Change how much of a food was eaten. It goes back to 'pending' until nutrient-calc has the
+    new day's totals."""
+    conn.execute(
+        "UPDATE meal_items SET grams = %s, portion_desc = %s, calc_status = 'pending' WHERE id = %s",
+        (grams, portion_desc, item_id),
+    )
+
+
 def delete_meal_item(conn: Connection, meal_id: int, item_id: int) -> bool:
     """Returns False if that item isn't in that meal."""
     cur = conn.execute("DELETE FROM meal_items WHERE id = %s AND meal_id = %s", (item_id, meal_id))

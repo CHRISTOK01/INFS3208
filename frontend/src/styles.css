@@ -440,19 +440,60 @@ details.more summary svg { transition: transform 0.15s; }
 .meal li:hover .icon-btn, .meal li .icon-btn:focus-visible { opacity: 1; }
 @media (hover: none) { .meal li .icon-btn { opacity: 1; } }
 
+/* ---------------------------------------------------------------- food diary */
+.diary { max-width: 820px; margin: 0 auto; }
+.diary-summary { display: flex; flex-direction: column; gap: 0.75rem; }
+.summary-numbers { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.4rem 1rem; }
+.summary-numbers > div { display: flex; flex-direction: column; line-height: 1.1; }
+.summary-numbers .big { font-family: var(--font-display); font-size: 1.6rem; font-weight: 650; }
+.summary-numbers .over .big { color: var(--amber); }
+.diary-section { padding: 0; overflow: hidden; }
+.diary-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--line); }
+.diary-head h2 { flex: 1; font-family: var(--font-display); font-size: 1.15rem; }
+.diary-head .meal-icon { width: 34px; height: 34px; border-radius: 10px; }
+.diary-total { font-weight: 650; color: var(--ink-2); }
+.diary-items { list-style: none; margin: 0; padding: 0; }
+.diary-item { border-bottom: 1px solid var(--line); }
+.diary-item.editing { background: var(--surface-2); }
+.diary-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.75rem 0.6rem 1.1rem; }
+.diary-row .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.diary-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diary-row .kcal { font-size: 0.88rem; color: var(--ink-2); white-space: nowrap; margin-right: 0.25rem; }
+.diary-item .picker { padding: 0 1.1rem 0.8rem; }
+.diary-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.45rem 0.75rem; }
+.add-food {
+  display: inline-flex; align-items: center; gap: 0.45rem; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 650; color: var(--brand); padding: 0.5rem 0.4rem; border-radius: 10px;
+}
+.add-food:hover { background: var(--brand-soft); }
+.diary-section form.row { padding: 0 1.1rem 0.9rem; }
+
+/* the "add food" panel: slides in from the right on a computer, up from the bottom on a phone */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(10, 16, 12, 0.45); display: flex; justify-content: flex-end; animation: fade-in 0.15s ease; }
+.sheet {
+  width: min(520px, 100%); height: 100%; overflow-y: auto; background: var(--bg); border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem;
+  animation: sheet-in 0.25s cubic-bezier(.2,.8,.2,1);
+}
+.sheet .results { max-height: none; flex: 1; }
+@keyframes sheet-in { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (max-width: 820px) {
+  .sheet-backdrop { align-items: flex-end; }
+  .sheet { height: 88vh; border-left: 0; border-radius: 18px 18px 0 0; }
+}
+
 /* ---------------------------------------------------------------- suggestions */
 .gap-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .suggestions { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.1rem; }
 .suggestion { display: flex; flex-direction: column; gap: 0.85rem; position: relative; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; }
 .suggestion:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .suggestion .band { position: absolute; inset: 0 0 auto 0; height: 4px; }
-.suggestion h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 650; }
+.suggestion h3 { font-family: var(--font-display); font-size: 1.6rem; font-weight: 750; line-height: 1.1; letter-spacing: -0.02em; }
 .suggestion .rest { color: var(--ink-2); font-size: 0.85rem; margin-top: 0.15rem; }
 .rank { position: absolute; top: 0.9rem; right: 0.9rem; font-family: var(--font-display); font-size: 0.85rem; font-weight: 700; color: var(--ink-3); }
 .covers { display: flex; flex-direction: column; gap: 0.55rem; }
 .cover .top { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.25rem; }
 .cover .meter > i { background: var(--brand); }
-.why { font-size: 0.85rem; color: var(--ink-2); padding-top: 0.75rem; border-top: 1px solid var(--line); }
 
 /* ---------------------------------------------------------------- login */
 .auth { min-height: calc(100vh - 140px); display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0; border-radius: 24px; overflow: hidden; box-shadow: var(--shadow-lg); background: var(--surface); border: 1px solid var(--line); }

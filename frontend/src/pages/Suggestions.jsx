@@ -8,14 +8,27 @@ import Icon from "../components/Icon.jsx";
 import { Callout, Empty, Meter, Segmented, SkeletonCard } from "../components/ui.jsx";
 import { amount, niceName, splitName, unit } from "../format.js";
 
-// Each food group gets a colour, used for the strip along the top of its cards
-const GROUP_COLOURS = {
-  "vegetables and legumes": "brand",
-  fruit: "coral",
-  "grain foods": "amber",
-  "milk, yoghurt, cheese and alternatives": "sky",
-  "lean meats, fish, eggs, nuts, seeds and tofu": "plum",
+// The food groups (as food-recommender names them, from the Australian Dietary Guidelines), each
+// with a colour for its tag and the strip along the top of its card. The tag's words come from
+// food-recommender's "kind" (like "Nuts & seeds"); the label here is only used if that's missing.
+const GROUPS = {
+  "vegetables and legumes": ["Vegetables", "brand"],
+  fruit: ["Fruit", "coral"],
+  "grain foods": ["Grains", "amber"],
+  "milk, yoghurt, cheese and alternatives": ["Dairy", "sky"],
+  "lean meats, fish, eggs, nuts, seeds and tofu": ["Protein", "plum"],
 };
+
+// AUSNUT names some foods with the general word first ("Seed, chia, dried", "Nut, cashew, raw").
+// For those, the card title reads better the other way round: "Chia seed", with "dried" underneath.
+const GENERAL_WORDS = ["seed", "seeds", "nut", "nuts", "bean", "beans", "lentil", "cheese"];
+
+function cardTitle(name) {
+  const [main, rest] = splitName(name);
+  if (!GENERAL_WORDS.includes(main.toLowerCase()) || !rest) return [main, rest];
+  const [kind, ...others] = rest.split(", ");
+  return [`${kind[0].toUpperCase()}${kind.slice(1)} ${main.toLowerCase()}`, others.join(", ")];
+}
 
 export default function Suggestions({ user, day, startMode = "today" }) {
   const [mode, setMode] = useState(startMode);     // "today", "week" or "nutrient"
@@ -131,14 +144,15 @@ export default function Suggestions({ user, day, startMode = "today" }) {
 }
 
 function SuggestionCard({ s, rank, names }) {
-  const [main, rest] = splitName(s.name);
-  const colour = GROUP_COLOURS[s.food_group] || "brand";
+  const [main, rest] = cardTitle(s.name);
+  const [groupLabel, colour] = GROUPS[s.food_group] || [s.food_group, "brand"];
+  const group = s.kind || groupLabel;      // e.g. "Nuts & seeds", from food-recommender
   return (
     <article className="card suggestion fade-in" style={{ animationDelay: `${rank * 40}ms` }}>
       <span className="band" style={{ background: `var(--${colour})` }} />
       <span className="rank">#{rank}</span>
       <div>
-        <span className={`chip ${colour}`}>{s.food_group}</span>
+        <span className={`chip ${colour}`} title={s.food_group}>{group}</span>
         <h3 style={{ marginTop: "0.6rem" }}>{main}</h3>
         {rest && <p className="rest">{rest}</p>}
       </div>
@@ -157,7 +171,6 @@ function SuggestionCard({ s, rank, names }) {
           </div>
         ))}
       </div>
-      <p className="why">{s.why}</p>
     </article>
   );
 }

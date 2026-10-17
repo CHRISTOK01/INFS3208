@@ -437,6 +437,7 @@ the student followed to do the deployment, and help fixing the Google sign-in se
 - "Firebase: Error (auth/api-key-not-valid.-please-pass-a-valid-api-key.). I get this when i hit continue with google"
 - "can you delete all users on for me cause I want to sign up with my google and test everything. Also can I make the google work for everyone instead of just my account"
 - "what is this privacy page? its just the same as the normal link with no /privacy.html" and "i mean like what is it meant to do? like whats the point of this"
+- "is the second vm still a backup of the first rn? make sure we are still following that architecture"
 
 **What Claude Code did and gave back:**
 - Asked the student to choose how to deploy (what "2 VMs" meant for the assignment, where the
@@ -460,37 +461,76 @@ the student followed to do the deployment, and help fixing the Google sign-in se
   everyone, added a privacy page, and published the app when the student asked for Google sign-in to
   work for everyone.
 
+- When the student asked whether the second VM was still a backup of the first, checked where every
+  pod was running and found three services had both copies on the same VM after rolling updates.
+  Made "one copy on each VM" a firm rule (including during rolling updates), applied it with no
+  downtime, explained how the databases fail over with their disks, and added a VM failure demo.
+
 **Where the AI/MT Tool Was Used:**
 - `k8s/` (all files), `services/*/Dockerfile`, `README.md`
 - `frontend/public/privacy.html`, `frontend/Dockerfile`
 
 ---
 
-## 13. Today or this week on the dashboard
+## 13. More realistic energy targets
 
 **AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
 
-**Purpose of Use:** Letting the dashboard's focus card show today or this week, and simplifying the
-vitamins and minerals chart colours.
+**Purpose of Use:** Fixing energy (calorie) targets that came out too high, after checking them
+against official guidance and common calorie calculators.
+
+**Prompts Used:**
+- "the website is overshooting how many calories an individual needs I feel like. like it says my maintence calories to maintain weight is like 2970 calories, which is much too high. Do some better research and check some calorie calculators or something and alter tweak this"
+
+**What Claude Code did and gave back:**
+- Worked through the student's 2,970 kcal: resting energy 1,548 kcal x activity level 1.92, which is
+  in the "active" range for someone who mostly sits.
+- Checked it against the FAO/WHO/UNU 2004 energy report (which NHMRC's values are based on) and
+  common online calculators. Found exercise was counted about three times too high (FAO: an hour a
+  day adds about 0.2 to the activity level) and the "sitting with some walking" level was set above
+  FAO's typical office worker (1.55).
+- Changed the activity levels to FAO's categories and scaled exercise from FAO's figure, bringing the
+  same profile to about 2,540 kcal. Updated the tests with the new hand-worked numbers and the docs.
+
+**Where the AI/MT Tool Was Used:**
+- `services/gap-analysis/app/targets.py`, `tests/test_targets.py`, `tests/test_integration.py`
+- `docs/architecture.md`, `k8s/30-services.yaml`
+
+---
+
+## 14. Website visual and usability improvements
+
+**AI/MT Tool:** Claude Code (Anthropic), Claude Opus 5.5
+
+**Purpose of Use:** Making the website simpler and clearer to use: a food diary layout, a
+today/this week view on the dashboard, and easier-to-read charts and food suggestions.
 
 **Prompts Used:**
 - "my focus thing says every target hit when i havent got enough carbs for the day (include macros too), also havent got enough pantothenic acid, mangenense or copper. Also on the hover popup for the vitamin and minerals, dont make it say like (from the 40% of todays food that has a value for it), just say the measurement like 1.2 of 1.7: 70.2%."
 - "Ok I need you to make an edit to the webpage. On the suggestions page, if you just have data for one day, it comes up with the recommendations and all to fill the gaps and all that, but on the home screen, it is limited to the weekly cycle. I need you to edit the your focus this week section so you can select the today and 7 day option (So i should be able to pick what i wanna see - cause i wanna get recommendations and analysis for today if i aint got enough data and all). Also with this some food has no value stuff, why is that grey and a seperate thing? Like just calculate the foods that have the value and put it into the under or over 70% category accordingly."
+- "redesign the log food page to look like a diary/log page ... Breakfast (+) Lunch - rice with chicken (edit/delete) (+) Dinner (+) ... Something like this cause I feel like that is a more use friendly and more simple way to lay it out so everyone understands"
+- "On the food ideas page, need to make the food title like eg. Milk bigger and bolder, and the coloured category of the item says like (milk, yougurt, cream or whatever), thats confusing because the user cant erasily identify what yuou arte recommending, make those categories say like Dairy, etc. Also the text in each food recommendation at the bottom, delete it, its not needed cause it just repeats what the graphs and other stuff in the box say above it anyway."
 
 **What Claude Code did and gave back:**
-- Gave the "Your focus" card a Today / This week switch. Today lists the nutrients furthest from
-  today's targets with how much is left to go; it opens on This week once 3 days are logged and on
-  Today before that. Its button opens Suggestions in the matching mode.
-- Removed the grey "some food has no value" colour from the chart: every bar is the total from the
-  foods that have a value, coloured by its percentage, and the pop-up just shows the amount, the
-  target and the percentage.
-- Made "Today" (on the focus card and in Suggestions) count energy and the macros, and use the
-  foods that have a value for nutrients like copper rather than leaving them out, so it only says
-  every target is reached when it really is. Suggestions can now fill protein, carbs and fat too.
+- Rebuilt the log food page as a food diary: a section for each meal listing its foods with their
+  calories, edit and delete on every food, "+ Add food" (a panel to search, type a barcode or pick a
+  saved recipe), and today's calories eaten, target and what's left at the top. Added a
+  `PATCH /api/meals/meals/{meal_id}/items/{item_id}` endpoint to meal-logging so the edit button
+  can change an amount, with tests.
+- Gave the dashboard's "Your focus" card a Today / This week switch, with its button opening
+  Suggestions in the matching mode. "Today" now counts energy, the macros and nutrients only some
+  foods have values for, and Suggestions can fill protein, carbs and fat too.
+- Simplified the vitamins and minerals chart: no separate grey colour, and the pop-up just shows the
+  amount, the target and the percentage.
+- Made the food suggestion cards easier to read: bigger, bolder food names, short food group tags
+  (Vegetables, Fruit, Grains, Dairy, Protein), and no repeated sentence at the bottom.
+- Checked the changes in a preview with a demo user's data, and updated the README and docs.
 
 **Where the AI/MT Tool Was Used:**
-- `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Suggestions.jsx`, `frontend/src/App.jsx`
-- `services/food-recommender/app/rules.py`, `app/repo.py`, `tests/test_rules.py`, `docs/architecture.md`
+- `frontend/src/pages/LogMeal.jsx`, `Dashboard.jsx`, `Suggestions.jsx`, `frontend/src/App.jsx`, `frontend/src/components/Icon.jsx`, `frontend/src/styles.css`
+- `services/meal-logging/app/routes_meals.py`, `app/repo.py`, `tests/test_foods.py`, `tests/test_integration.py`
+- `services/food-recommender/app/rules.py`, `app/repo.py`, `tests/test_rules.py`
+- `README.md`, `docs/architecture.md`, `k8s/30-services.yaml`, `k8s/40-frontend.yaml`
 
 ---
 

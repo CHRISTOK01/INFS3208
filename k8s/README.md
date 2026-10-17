@@ -252,6 +252,20 @@ kubectl get hpa -n macroscope --watch
 kubectl delete pod -n macroscope -l app=meal-logging --wait=false
 kubectl get pods -n macroscope -l app=meal-logging -w
 
+# VM failure: every service has one pod on each of the 2 VMs, so losing a VM doesn't take
+# anything down. "Drain" a VM to pretend it has failed: Kubernetes moves everything off it, and the
+# copies on the other VM keep the site working. The databases move with their disks (about a
+# minute for any that were on that VM).
+#   get nodes                     list the 2 VMs; copy one name for the next commands
+#   drain                         stop using that VM and move its pods to the other one
+#   --ignore-daemonsets           leave Google's own per-VM helpers alone
+#   --delete-emptydir-data        allow pods with temporary scratch space to be moved
+kubectl get nodes
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+kubectl get pods -n macroscope -o wide
+# Bring the VM back into use (new pods can go on it again)
+kubectl uncordon <node-name>
+
 # Rolling update: build and push version 1.1.0 of a service, then switch to it. Pods are
 # replaced one at a time, and the website footer shows the new version.
 docker build --build-arg APP_VERSION=1.1.0 -t "$REG/nutrient-calc:1.1.0" services/nutrient-calc

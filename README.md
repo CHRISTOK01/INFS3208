@@ -120,9 +120,10 @@ The tabs:
 - **Dashboard**: today's energy and macros (and what's left), a chart of vitamins and minerals
   against your targets, your limits (sodium, saturated fat, sugar, alcohol, caffeine), and the
   nutrients you've been short on over the last 7 days.
-- **Log food**: search foods (choose raw or cooked first), or type a barcode. Pick a household
-  portion like "1 banana, medium", build up a meal and save it. Save meals as recipes and log them
-  again in one click. Each food says how complete its data is.
+- **Food diary**: a section for each meal (breakfast, lunch, dinner, snacks) listing what you had
+  and its calories, with edit and delete on every food. **+ Add food** opens a panel to search
+  (raw or cooked first), type a barcode, or pick a saved recipe; choose a household portion like
+  "1 banana, medium" and it's added straight away. Any meal can be saved as a recipe.
 - **Suggestions**: everyday foods, each with a sentence saying why. **Today** fills the most of what
   you still need to hit today's targets; **This week** helps with what you've been short on over
   the last 7 days; **Rich in...** finds good sources of any one nutrient.
@@ -180,7 +181,7 @@ data; our services can ask about anyone, using their own short-lived service tok
 | Look up a packaged food by barcode | `GET /foods/barcode/{code}` | no |
 | See a food and its household portions | `GET /foods/{fdc_id}` | no |
 | Log a meal (in grams, or as portions) | `POST /meals` | yes |
-| List, view and delete meals; add or remove food | `GET /meals?start&end`, `GET /meals/{id}`, `DELETE /meals/{id}`, `POST /meals/{id}/items`, `DELETE /meals/{id}/items/{item_id}` | yes |
+| List, view and delete meals; add, change the amount of, or remove food | `GET /meals?start&end`, `GET /meals/{id}`, `DELETE /meals/{id}`, `POST /meals/{id}/items`, `PATCH /meals/{id}/items/{item_id}`, `DELETE /meals/{id}/items/{item_id}` | yes |
 | Send days that nutrient-calc missed while it was down | `POST /meals/recalculate-pending` | yes |
 | Saved recipes: save, list, delete, log again in one click | `POST /recipes`, `GET /recipes`, `DELETE /recipes/{id}`, `POST /recipes/{id}/log` | yes |
 
@@ -329,7 +330,7 @@ docker compose stop nutrient-calc
 #    "totals pending". The dashboard shows the last saved 7-day report, marked as out of date,
 #    and says today's totals can't be worked out right now. Suggestions say the same.
 docker compose start nutrient-calc
-#    Then click "Update my totals" on the Log food page (or POST /api/meals/meals/recalculate-pending)
+#    Then click "Update my totals" in the Food diary (or POST /api/meals/meals/recalculate-pending)
 #    and everything catches up.
 
 # 3. A database goes down

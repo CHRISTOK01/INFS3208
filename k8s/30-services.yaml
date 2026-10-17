@@ -8,8 +8,9 @@
 #     if it can take requests (it needs its database). A pod that isn't ready gets no traffic.
 #   - Rolling updates start a new pod and wait until it's ready before stopping an old one
 #     (maxUnavailable: 0), so an update or rollback never drops requests.
-#   - topologySpreadConstraints puts the 2 pods on different nodes where it can, so if one VM
-#     goes down, the other copy keeps the service running.
+#   - topologySpreadConstraints makes the 2 pods run on different VMs (nodes). The 2 VMs are
+#     identical, so each one holds a working copy of every service: if one VM goes down, the copy
+#     on the other keeps the service running while Kubernetes replaces the lost pod.
 #   - The image tag is the version. To roll out v1.1.0:
 #       kubectl set image deployment/meal-logging meal-logging=<registry>/meal-logging:1.1.0 -n macroscope
 ---
@@ -52,13 +53,19 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          # A firm rule, not a preference: the copies must be on different VMs
+          whenUnsatisfiable: DoNotSchedule
+          # Only count VMs that can take pods. If one is drained or broken, its replacements can
+          # all go on the other VM, so the service keeps running there.
+          nodeTaintsPolicy: Honor
+          # Spread each version on its own, so a rolling update always ends with one copy per VM
+          matchLabelKeys: ["pod-template-hash"]
           labelSelector:
             matchLabels:
               app: meal-logging
       containers:
         - name: meal-logging
-          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/meal-logging:1.0.0
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/meal-logging:1.0.1
           ports:
             - containerPort: 8001
           envFrom:
@@ -147,7 +154,13 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          # A firm rule, not a preference: the copies must be on different VMs
+          whenUnsatisfiable: DoNotSchedule
+          # Only count VMs that can take pods. If one is drained or broken, its replacements can
+          # all go on the other VM, so the service keeps running there.
+          nodeTaintsPolicy: Honor
+          # Spread each version on its own, so a rolling update always ends with one copy per VM
+          matchLabelKeys: ["pod-template-hash"]
           labelSelector:
             matchLabels:
               app: nutrient-calc
@@ -238,13 +251,19 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          # A firm rule, not a preference: the copies must be on different VMs
+          whenUnsatisfiable: DoNotSchedule
+          # Only count VMs that can take pods. If one is drained or broken, its replacements can
+          # all go on the other VM, so the service keeps running there.
+          nodeTaintsPolicy: Honor
+          # Spread each version on its own, so a rolling update always ends with one copy per VM
+          matchLabelKeys: ["pod-template-hash"]
           labelSelector:
             matchLabels:
               app: gap-analysis
       containers:
         - name: gap-analysis
-          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/gap-analysis:1.0.0
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/gap-analysis:1.0.1
           ports:
             - containerPort: 8003
           envFrom:
@@ -331,13 +350,19 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          # A firm rule, not a preference: the copies must be on different VMs
+          whenUnsatisfiable: DoNotSchedule
+          # Only count VMs that can take pods. If one is drained or broken, its replacements can
+          # all go on the other VM, so the service keeps running there.
+          nodeTaintsPolicy: Honor
+          # Spread each version on its own, so a rolling update always ends with one copy per VM
+          matchLabelKeys: ["pod-template-hash"]
           labelSelector:
             matchLabels:
               app: food-recommender
       containers:
         - name: food-recommender
-          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/food-recommender:1.0.1
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/food-recommender:1.0.2
           ports:
             - containerPort: 8004
           envFrom:

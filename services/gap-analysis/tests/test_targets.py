@@ -60,11 +60,22 @@ def test_bmr_mifflin_st_jeor():
     assert bmr("female", 60, 165, 30) == 1320.25     # 600 + 1031.25 - 150 - 161
 
 
-def test_activity_level_adds_exercise_and_is_capped():
-    assert activity_level({"lifestyle": "seated_some_walking", "exercise_sessions_per_week": 0}) == 1.65
-    # 4.5 sessions add NHMRC's 0.3, so 3 sessions add 0.2
-    assert activity_level({"lifestyle": "seated_some_walking", "exercise_sessions_per_week": 3}) == 1.85
-    assert activity_level({"lifestyle": "heavy_work", "exercise_sessions_per_week": 14}) == 2.5
+def test_activity_level_adds_a_little_for_each_exercise_session():
+    assert activity_level({"lifestyle": "seated_some_walking", "exercise_sessions_per_week": 0}) == 1.55
+    # FAO: 7 hours of exercise a week adds 0.2. 3 sessions of 45 minutes = 2.25 hours, so 0.064
+    assert activity_level({"lifestyle": "seated_some_walking", "exercise_sessions_per_week": 3}) == 1.61
+    # 14 sessions = 10.5 hours, so 0.3: 1.90 + 0.3 = 2.2, still under FAO's 2.4 cap
+    assert activity_level({"lifestyle": "heavy_work", "exercise_sessions_per_week": 14}) == 2.2
+
+
+def test_a_desk_worker_who_trains_4_times_a_week():
+    # The case that started this change: a 21-year-old man, 166 cm, 61 kg, mostly sitting, 4
+    # sessions a week. BMR = 610 + 1037.5 - 105 + 5 = 1547.5. PAL = 1.55 + 4 x 0.0214 = 1.64.
+    person = {**MAN, "date_of_birth": date(2005, 1, 1), "height_cm": 166, "weight_kg": 61,
+              "lifestyle": "seated_some_walking", "exercise_sessions_per_week": 4}
+    rows, result = targets_for(person)
+    assert result["situation"]["activity_level"] == 1.64
+    assert rows["energy"]["target_amount"] == 2540      # 1547.5 x 1.64 = 2538
 
 
 def test_the_form_offers_the_same_lifestyles_as_the_maths():
@@ -76,29 +87,29 @@ def test_the_form_offers_the_same_lifestyles_as_the_maths():
 def test_energy_for_a_man_who_stands_at_work():
     rows, result = targets_for(MAN)
     assert result["situation"]["age"] == 30
-    assert rows["energy"]["target_amount"] == 3290     # 1780 x 1.85 = 3293
-    assert result["situation"]["energy_kj"] == 13770   # 3290 x 4.184
+    assert rows["energy"]["target_amount"] == 3030     # 1780 x 1.70 = 3026
+    assert result["situation"]["energy_kj"] == 12680   # 3030 x 4.184
 
 
 def test_macros_add_up_to_the_energy():
     rows, _ = targets_for(MAN)
     energy, protein, fat, carbs = (rows[k]["target_amount"] for k in ("energy", "protein", "fat", "carbs"))
-    assert fat == 110                                  # 30% of 3290 / 9
-    # Protein: the RDI is 0.84 x 80 = 67 g, but at least 15% of energy is 3290 x 0.15 / 4 = 123 g
-    assert protein == 123
+    assert fat == 101                                  # 30% of 3030 / 9
+    # Protein: the RDI is 0.84 x 80 = 67 g, but at least 15% of energy is 3030 x 0.15 / 4 = 114 g
+    assert protein == 114
     assert abs(protein * 4 + fat * 9 + carbs * 4 - energy) <= 4
 
 
 def test_losing_weight_takes_500_kcal_off_and_raises_protein():
     rows, _ = targets_for({**MAN, "goal": "lose"})
-    assert rows["energy"]["target_amount"] == 2790     # 3293 - 500
+    assert rows["energy"]["target_amount"] == 2530     # 3026 - 500
     assert rows["protein"]["target_amount"] == 128     # 1.6 x 80 kg
     assert "lose" in rows["protein"]["source"]
 
 
 def test_regular_training_means_more_protein():
     rows, _ = targets_for({**WOMAN, "weight_kg": 75, "lifestyle": "mostly_seated", "exercise_sessions_per_week": 3})
-    # Energy: (750 + 1031.25 - 150 - 161) x (1.45 + 0.2) = 2426 -> 2430 kcal, so 15-25% is 91 to 152 g.
+    # Energy: (750 + 1031.25 - 150 - 161) x (1.45 + 0.06) = 2220 kcal, so 15-25% is 83 to 139 g.
     # 1.4 g x 75 kg = 105 g sits inside that, and is more than the RDI (0.75 x 75 = 56 g).
     assert rows["protein"]["target_amount"] == 105
 
@@ -121,8 +132,8 @@ def test_second_trimester_adds_energy_and_uses_pregnancy_values():
     rows, result = targets_for({**PREGNANT, "due_date": ON + timedelta(weeks=20)})
     assert result["situation"]["trimester"] == 2 and result["situation"]["pregnancy_week"] == 20
     # BMR from the pre-pregnancy weight: 620 + 1031.25 - 150 - 161 = 1340.25
-    # x 1.65 = 2211.4, + 1.4 MJ (334.6 kcal) = 2546 -> 2550
-    assert rows["energy"]["target_amount"] == 2550
+    # x 1.55 = 2077.4, + 1.4 MJ (334.6 kcal) = 2412 -> 2410
+    assert rows["energy"]["target_amount"] == 2410
     assert rows["iron"]["target_amount"] == 27
     assert rows["alcohol"]["upper_limit"] == 0
     assert rows["caffeine"]["upper_limit"] == 200
@@ -132,14 +143,14 @@ def test_second_trimester_adds_energy_and_uses_pregnancy_values():
 def test_first_trimester_needs_no_extra_energy_or_protein():
     rows, result = targets_for({**PREGNANT, "due_date": ON + timedelta(weeks=30)})
     assert result["situation"]["trimester"] == 1
-    assert rows["energy"]["target_amount"] == 2210     # 1340.25 x 1.65 = 2211
+    assert rows["energy"]["target_amount"] == 2080     # 1340.25 x 1.55 = 2077
     assert rows["iron"]["target_amount"] == 27         # the vitamin and mineral needs change straight away
 
 
 def test_breastfeeding_adds_2_mj():
     rows, result = targets_for({**WOMAN, "breastfeeding": True})
-    # 1320.25 x 1.65 = 2178.4, + 2 MJ (478 kcal) = 2656 -> 2660
-    assert rows["energy"]["target_amount"] == 2660
+    # 1320.25 x 1.55 = 2046.4, + 2 MJ (478 kcal) = 2524 -> 2520
+    assert rows["energy"]["target_amount"] == 2520
     assert rows["iron"]["target_amount"] == 9
     assert result["situation"]["life_stage"] == "breastfeeding"
     assert result["situation"]["diet"] == "omnivore"
@@ -174,8 +185,8 @@ def test_adult_limits():
     rows, _ = targets_for(MAN)
     assert rows["alcohol"]["upper_limit"] == 14.3      # 10 standard drinks of 10 g a week, per day
     assert rows["caffeine"]["upper_limit"] == 400
-    assert rows["saturated_fat"]["upper_limit"] == 37  # 10% of 3290 kcal / 9
-    assert rows["free_sugars"]["upper_limit"] == 82    # 10% of 3290 kcal / 4
+    assert rows["saturated_fat"]["upper_limit"] == 34  # 10% of 3030 kcal / 9
+    assert rows["free_sugars"]["upper_limit"] == 76    # 10% of 3030 kcal / 4
 
 
 def test_sodium_has_a_limit_not_a_target_and_fibre_has_an_aim():

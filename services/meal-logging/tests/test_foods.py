@@ -83,6 +83,16 @@ def test_barcodes_match_with_or_without_leading_zeros():
     assert foods.normalise_barcode(" 20048556 ") == "20048556"
 
 
+def test_a_new_amount_needs_grams_or_a_portion():
+    from app.routes_meals import AmountIn
+    assert AmountIn(grams=150).grams == 150
+    assert AmountIn(portion_id=5, quantity=2).quantity == 2
+    with pytest.raises(ValidationError):
+        AmountIn()
+    with pytest.raises(ValidationError):
+        AmountIn(grams=100, portion_id=5)
+
+
 def test_item_needs_grams_or_a_portion():
     assert ItemIn(fdc_id=1, grams=100).grams == 100
     assert ItemIn(fdc_id=1, portion_id=5, quantity=2).portion_id == 5

@@ -34,6 +34,19 @@ class ItemIn(BaseModel):
         return self
 
 
+class AmountIn(BaseModel):
+    """A new amount for a food already in a meal: EITHER grams, OR a portion_id and how many."""
+    grams: float | None = Field(default=None, gt=0, le=MAX_GRAMS)
+    portion_id: int | None = None
+    quantity: float = Field(default=1, gt=0, le=50)
+
+    @model_validator(mode="after")
+    def grams_or_portion(self):
+        if (self.grams is None) == (self.portion_id is None):
+            raise ValueError("Give either grams or a portion_id, but not both")
+        return self
+
+
 class MealIn(BaseModel):
     meal_date: date
     meal_type: Literal["breakfast", "lunch", "dinner", "snack"]
@@ -179,6 +192,25 @@ def delete_meal(meal_id: int, user_id: str = Depends(auth.current_user_id), conn
     repo.delete_meal(conn, meal_id)
     updated = commit_and_sync(conn, user_id, meal["meal_date"])
     return {"deleted": meal_id, "calc_status": "done" if updated else "pending"}
+
+
+@router.patch("/{meal_id}/items/{item_id}")
+def change_item(
+    meal_id: int, item_id: int, body: AmountIn,
+    user_id: str = Depends(auth.current_user_id), conn: Connection = Depends(get_conn),
+):
+    """Change how much of a food you had (the food diary's edit button). It's turned into grams the
+    same way as when it was added, and the day's totals are sent to nutrient-calc again."""
+    meal = get_own_meal(conn, user_id, meal_id)
+    item = repo.get_meal_item(conn, meal_id, item_id)
+    if item is None:
+        raise HTTPException(404, f"Item {item_id} isn't in meal {meal_id}")
+    new = prepare_items(conn, [ItemIn(fdc_id=item["fdc_id"], grams=body.grams, portion_id=body.portion_id,
+                                      quantity=body.quantity)])[0]
+    repo.lock_day(conn, user_id, meal["meal_date"])
+    repo.update_meal_item(conn, item_id, new["grams"], new["portion_desc"])
+    commit_and_sync(conn, user_id, meal["meal_date"])
+    return meals_reply(conn, [meal])[0]
 
 
 @router.delete("/{meal_id}/items/{item_id}")

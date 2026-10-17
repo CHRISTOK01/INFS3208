@@ -188,7 +188,7 @@ top of `app/targets.py`:
 | Target | How it's worked out | Source |
 |---|---|---|
 | Energy | BMR (Mifflin-St Jeor) x physical activity level, which is NHMRC's own method | NHMRC; Frankenfield 2005 for the equation |
-| Activity level | the middle of NHMRC's range for the chosen lifestyle (1.45 to 2.2), plus 0.3 for every 4.5 exercise sessions a week, capped at 2.5 | NHMRC |
+| Activity level | a normal day sets the start: 1.45 mostly sitting, 1.55 sitting with some walking, 1.70 on your feet, 1.90 heavy work (inside FAO's sedentary 1.40-1.69 and moderately active 1.70-1.99 ranges). Each weekly exercise session (45 min) adds about 0.02, because FAO says an hour a day adds about 0.2. Capped at 2.4 | FAO/WHO/UNU 2004 (Table 5.3), which NHMRC's energy values are based on |
 | Pregnancy and breastfeeding | +0 / +1.4 / +1.9 MJ a day by trimester, +2.0 MJ breastfeeding; BMR uses the weight before pregnancy | NHMRC |
 | Goal | lose: -500 kcal a day (about 0.5 kg a week), gain: +250 kcal; never below BMR; no loss or gain targets while pregnant or breastfeeding | about 7,700 kcal per kg of body fat |
 | Protein | the NHMRC RDI per kg (higher in pregnancy and breastfeeding), raised to 1.6 g/kg when losing or gaining and 1.4 g/kg when training 3+ times a week, kept within 15-25% of energy | NHMRC; Morton 2018; ISSN 2017 |

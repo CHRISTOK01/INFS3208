@@ -15,7 +15,7 @@ import Suggestions from "./pages/Suggestions.jsx";
 
 const TABS = [
   ["dashboard", "Dashboard", "dashboard"],
-  ["log", "Log food", "plusCircle"],
+  ["log", "Food diary", "plusCircle"],
   ["suggestions", "Suggestions", "sparkle"],
   ["profile", "My details", "user"],
 ];

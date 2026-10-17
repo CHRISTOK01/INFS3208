@@ -143,6 +143,29 @@ def food_group(adg_code: int | None) -> str | None:
     return FOOD_GROUPS.get(str(adg_code)[0])
 
 
+def food_kind(adg_code: int) -> str:
+    """A short everyday label for what kind of food this is, from its code. The five food groups
+    are broad (chia seeds, fish and tofu are all in "lean meats, fish, eggs, nuts, seeds and
+    tofu"), so this is what the website shows on each suggestion."""
+    if adg_code // 10 in (501, 502):
+        return "Meat"
+    if adg_code // 10 in (503, 504):
+        return "Poultry"
+    if adg_code == 505:
+        return "Fish & seafood"
+    if adg_code == 506:
+        return "Eggs"
+    if adg_code == NUTS_AND_SEEDS:
+        return "Nuts & seeds"
+    if adg_code == 5072:
+        return "Tofu & tempeh"
+    if adg_code == 204:
+        return "Legumes"
+    if adg_code in PLANT_MILKS:
+        return "Plant milk"
+    return {"1": "Grains", "2": "Vegetables", "3": "Fruit", "4": "Dairy"}.get(str(adg_code)[0], "Other")
+
+
 def animal_source(adg_code: int) -> str | None:
     """"meat", "fish", "egg" or "dairy" if the food comes from an animal, worked out from its code."""
     if adg_code // 10 in (501, 502, 503, 504):     # meat and poultry, lean or fatty, processed or not
@@ -320,6 +343,7 @@ def recommend(foods: list[dict], shortfalls: dict[str, float], units: dict[str, 
             "fdc_id": food["fdc_id"],
             "name": food["name"],
             "food_group": group,
+            "kind": food_kind(food["adg_code"]),
             "serve_g": STANDARD_SERVES[food["adg_code"]],
             "kcal": serve_kcal(food),
             "score": total,

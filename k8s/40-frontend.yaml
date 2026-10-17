@@ -37,13 +37,19 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          # A firm rule, not a preference: the copies must be on different VMs
+          whenUnsatisfiable: DoNotSchedule
+          # Only count VMs that can take pods. If one is drained or broken, its replacements can
+          # all go on the other VM, so the service keeps running there.
+          nodeTaintsPolicy: Honor
+          # Spread each version on its own, so a rolling update always ends with one copy per VM
+          matchLabelKeys: ["pod-template-hash"]
           labelSelector:
             matchLabels:
               app: frontend
       containers:
         - name: frontend
-          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/frontend:1.0.3
+          image: australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope/frontend:1.0.6
           ports:
             - containerPort: 80
           readinessProbe:

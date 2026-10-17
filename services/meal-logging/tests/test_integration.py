@@ -170,6 +170,26 @@ def test_add_and_delete_items(client, user):
     assert nutrient_calc_day(user, DAY)["energy"]["amount"] == pytest.approx(128.02)
 
 
+def test_change_how_much_of_a_food(client, user):
+    meal = client.get(f"/api/meals/meals?start={DAY}", headers=user["headers"]).json()[0]
+    spinach = meal["items"][0]                          # 100 g of spinach, 23 kcal
+    changed = client.patch(f"/api/meals/meals/{meal['id']}/items/{spinach['id']}", headers=user["headers"],
+                           json={"grams": 200}).json()
+    assert float(changed["items"][0]["grams"]) == 200
+    assert changed["calc_status"] == "done"
+    # 200 g spinach (46 kcal) + 118 g banana (105.02 kcal)
+    assert nutrient_calc_day(user, DAY)["energy"]["amount"] == pytest.approx(151.02)
+
+    # Back to how it was, so the other tests' numbers still add up
+    client.patch(f"/api/meals/meals/{meal['id']}/items/{spinach['id']}", headers=user["headers"], json={"grams": 100})
+    assert nutrient_calc_day(user, DAY)["energy"]["amount"] == pytest.approx(128.02)
+
+    # Someone else can't change it, and a made-up item isn't found
+    other = login_headers("someone-else")
+    assert client.patch(f"/api/meals/meals/{meal['id']}/items/{spinach['id']}", headers=other, json={"grams": 1}).status_code == 404
+    assert client.patch(f"/api/meals/meals/{meal['id']}/items/999999999", headers=user["headers"], json={"grams": 1}).status_code == 404
+
+
 def test_people_cannot_see_each_others_meals(client, user):
     meal = client.get(f"/api/meals/meals?start={DAY}", headers=user["headers"]).json()[0]
     stranger = login_headers(f"it-{uuid.uuid4().hex[:12]}")

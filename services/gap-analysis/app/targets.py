@@ -10,9 +10,12 @@ ENERGY (calories), the method NHMRC uses: resting energy x physical activity lev
        men:   10 x weight(kg) + 6.25 x height(cm) - 5 x age + 5
        women: 10 x weight(kg) + 6.25 x height(cm) - 5 x age - 161
      In pregnancy NHMRC uses the weight from before the pregnancy.
-  2. PAL from NHMRC's lifestyle table (the middle of each range), plus 0.3 for every 4 to 5
-     sessions a week of 30-60 minutes of sport (NHMRC's own adjustment, shared out per session).
-     Capped at 2.5, which NHMRC says is hard to keep up for long.
+  2. PAL from the FAO/WHO/UNU 2004 report on human energy requirements, which NHMRC's energy
+     values are based on (Table 5.3: sedentary 1.40-1.69, moderately active 1.70-1.99, vigorous
+     2.00-2.40). A normal day sets the starting PAL. Planned exercise is added on top: FAO says an
+     hour a day of moderate to vigorous exercise (7 hours a week) raises PAL by about 0.2, so each
+     session (counted as 45 minutes, the middle of "30-60 minutes") adds 0.2 x 0.75 / 7 = about 0.02.
+     Capped at 2.4, which FAO says is hard to keep up for long.
   3. Pregnancy and breastfeeding (NHMRC): 1st trimester nothing extra, 2nd +1.4 MJ a day,
      3rd +1.9 MJ, breastfeeding +2.0 MJ.
   4. Goal: lose = 500 kcal a day less, gain = 250 kcal more. Body fat holds about 7,700 kcal per kg,
@@ -38,15 +41,22 @@ from datetime import date
 KJ_PER_KCAL = 4.184
 KCAL_PER_G = {"protein": 4, "carbs": 4, "fat": 9, "alcohol": 7}
 
-# NHMRC's lifestyle table: (PAL, description shown to people)
+# A normal day, before any planned exercise: (PAL, description shown to people).
+# From the FAO/WHO/UNU 2004 categories (Table 5.3):
+#   sedentary (1.40-1.69): 1.45 for sitting most of the day, 1.55 for FAO's typical office worker
+#     who also walks and stands a bit
+#   moderately active (1.70-1.99): 1.70 for jobs on your feet that aren't strenuous, 1.90 for
+#     heavy work like construction (FAO puts masons and construction workers here)
 LIFESTYLES = {
     "mostly_seated":    (1.45, "Seated most of the day, e.g. office work"),
-    "seated_some_walking": (1.65, "Mostly seated with some walking and standing, e.g. students, drivers"),
-    "standing_walking": (1.85, "Standing or walking most of the day, e.g. retail, hospitality, trades"),
-    "heavy_work":       (2.2, "Heavy physical work, e.g. construction, farming"),
+    "seated_some_walking": (1.55, "Mostly seated with some walking and standing, e.g. students, drivers"),
+    "standing_walking": (1.70, "Standing or walking most of the day, e.g. retail, hospitality, trades"),
+    "heavy_work":       (1.90, "Heavy physical work, e.g. construction, farming"),
 }
-PAL_PER_EXERCISE_SESSION = 0.3 / 4.5     # NHMRC: add 0.3 for 4-5 sessions a week
-MAX_PAL = 2.5
+# FAO: an hour a day of moderate to vigorous exercise (7 hours a week) adds about 0.2 to PAL.
+# A session is counted as 45 minutes (0.75 hours), so each one a week adds 0.2 x 0.75 / 7.
+PAL_PER_EXERCISE_SESSION = 0.2 * 0.75 / 7
+MAX_PAL = 2.4     # FAO: higher than this is hard to keep up for long
 
 PREGNANCY_EXTRA_KJ = {1: 0, 2: 1400, 3: 1900}
 BREASTFEEDING_EXTRA_KJ = 2000
