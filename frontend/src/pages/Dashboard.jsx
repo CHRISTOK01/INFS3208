@@ -10,7 +10,7 @@ import { Bar } from "react-chartjs-2";
 import { api, nutrientNames } from "../api.js";
 import Icon from "../components/Icon.jsx";
 import { Callout, Empty, Meter, Ring, Segmented, SkeletonCard } from "../components/ui.jsx";
-import { LIMITS, MACROS, MACRO_COLOURS, amount, cssColour, niceDate, niceName, shiftDate, unit, withAlpha } from "../format.js";
+import { LIMITS, MACROS, MACRO_COLOURS, amount, cssColour, niceDate, niceName, shiftDate, todayString, unit, withAlpha } from "../format.js";
 
 // Chart.js only includes the parts you register, which keeps the download small
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip);
@@ -44,8 +44,8 @@ export default function Dashboard({ user, day, onGoTo }) {
     <div className="stack">
       <div className="page-head">
         <div>
-          <h1 className="display">{niceDate(day) === "Today" ? "Today" : niceDate(day)}</h1>
-          <p>How your eating compares with the targets made for you.</p>
+          <h1 className="display">{niceDate(day)}</h1>
+          <p>How {day === todayString() ? "your eating today compares" : "your eating on this day compared"} with the targets made for you.</p>
         </div>
         <button className="btn" onClick={() => onGoTo("log")}><Icon name="plus" /> Log food</button>
       </div>
@@ -55,11 +55,11 @@ export default function Dashboard({ user, day, onGoTo }) {
         {errors.report ? <ErrorCard message={errors.report} /> : report ? <FocusCard report={report} names={names} onGoTo={onGoTo} /> : <SkeletonCard lines={4} />}
       </div>
 
-      {today && <MicroCard rows={today.nutrients} names={names} />}
+      {today && <MicroCard rows={today.nutrients} names={names} nothingLogged={byKey.energy?.amount === null} />}
 
       <div className="grid grid-2">
         {errors.history ? <ErrorCard message={errors.history} /> : history && today ? <TrendCard days={history} day={day} target={byKey.energy?.target_amount} /> : <SkeletonCard lines={5} />}
-        {today ? <LimitsCard byKey={byKey} names={names} /> : <SkeletonCard lines={5} />}
+        {today ? <LimitsCard byKey={byKey} names={names} isToday={day === todayString()} /> : <SkeletonCard lines={5} />}
       </div>
 
       {report && <ReportCard report={report} names={names} />}
@@ -71,6 +71,20 @@ export default function Dashboard({ user, day, onGoTo }) {
 function groupOf(key, names) {
   const category = names[key]?.category;
   return category === "vitamin" || category === "mineral" ? category : "other";
+}
+
+// How chart pop-ups look: dark text on a light box in dark mode, and the other way round in
+// light mode. The colours come from the stylesheet, so both charts always match.
+function tooltipLook() {
+  return {
+    backgroundColor: cssColour("--ink"),
+    titleColor: cssColour("--bg"),
+    bodyColor: cssColour("--bg"),
+    padding: 10,
+    cornerRadius: 8,
+    displayColors: false,
+    titleFont: { weight: 700 },
+  };
 }
 
 function ErrorCard({ message }) {
@@ -164,6 +178,12 @@ function FocusCard({ report, names, onGoTo }) {
               );
             })}
           </div>
+          {fortnight.excesses.length > 0 && (
+            <p className="small muted" style={{ marginBottom: "1rem" }}>
+              Over the limit:{" "}
+              {fortnight.excesses.map((k) => <span key={k} className="chip red" style={{ marginRight: "0.3rem" }}>{niceName(k, names)}</span>)}
+            </p>
+          )}
           <button className="btn block" onClick={() => onGoTo("suggestions")}><Icon name="sparkle" /> Foods that would help</button>
         </>
       )}
@@ -198,7 +218,7 @@ const targetLine = {
   },
 };
 
-function MicroCard({ rows, names }) {
+function MicroCard({ rows, names, nothingLogged }) {
   const [kind, setKind] = useState("vitamin");
   const shown = rows.filter((r) => r.target_amount && !MACROS.includes(r.nutrient_key) && groupOf(r.nutrient_key, names) === kind);
 
@@ -234,7 +254,7 @@ function MicroCard({ rows, names }) {
     plugins: {
       targetLine: { axis: "x", value: 100, colour: cssColour("--ink-3") },
       tooltip: {
-        backgroundColor: cssColour("--ink"), titleColor: cssColour("--bg"), bodyColor: cssColour("--bg"), padding: 10, cornerRadius: 8,
+        ...tooltipLook(),
         callbacks: {
           label: (ctx) => {
             const r = shown[ctx.dataIndex];
@@ -255,9 +275,13 @@ function MicroCard({ rows, names }) {
         </div>
         <Segmented value={kind} onChange={setKind} options={[["vitamin", "Vitamins"], ["mineral", "Minerals"], ["other", "Other"]]} label="Which nutrients" />
       </div>
-      <div style={{ height: `${shown.length * 30 + 40}px` }}>
-        <Bar data={data} options={options} plugins={[targetLine]} />
-      </div>
+      {nothingLogged ? (
+        <Empty icon="leaf" title="Nothing to show yet">Log some food and each vitamin and mineral fills up here.</Empty>
+      ) : (
+        <div style={{ height: `${shown.length * 30 + 40}px` }}>
+          <Bar data={data} options={options} plugins={[targetLine]} />
+        </div>
+      )}
       <div className="legend" style={{ marginTop: "0.75rem" }}>
         <span><i style={{ background: colours.met }} />target met</span>
         <span><i style={{ background: colours.close }} />70% or more</span>
@@ -297,7 +321,7 @@ function TrendCard({ days, day, target }) {
     plugins: {
       targetLine: { axis: "y", value: target, colour: cssColour("--coral") },
       tooltip: {
-        backgroundColor: cssColour("--ink"), padding: 10, cornerRadius: 8,
+        ...tooltipLook(),
         callbacks: { label: (ctx) => (ctx.raw === null ? "nothing logged" : `${amount(ctx.raw)} kcal`) },
       },
     },
@@ -325,14 +349,14 @@ function TrendCard({ days, day, target }) {
 
 // ---------------------------------------------------------------- limits
 
-function LimitsCard({ byKey, names }) {
+function LimitsCard({ byKey, names, isToday }) {
   const rows = LIMITS.map((k) => byKey[k]).filter(Boolean);
   return (
     <div className="card">
       <div className="card-head">
         <div>
-          <h2>Limits today</h2>
-          <p className="sub">Things it's best to keep under.</p>
+          <h2>{isToday ? "Limits today" : "Limits on this day"}</h2>
+          <p className="sub">{isToday ? "So far today. The report below averages the days before today." : "Things it's best to keep under."}</p>
         </div>
         <Icon name="shield" />
       </div>
@@ -346,7 +370,7 @@ function LimitsCard({ byKey, names }) {
             <div key={n.nutrient_key} className={`limit-row ${state}`}>
               <strong className="small">{niceName(n.nutrient_key, names)}</strong>
               <span className="small num muted">
-                {amount(had)} {unit(n.unit)} {none ? "(none advised)" : `of ${amount(n.upper_limit)}`}
+                {amount(had)} {none ? `${unit(n.unit)} (none advised)` : `of ${amount(n.upper_limit)} ${unit(n.unit)}`}
                 {state === "over" && <span className="chip red" style={{ marginLeft: "0.4rem" }}>over</span>}
               </span>
               <Meter pct={pct} />
@@ -372,8 +396,9 @@ function ReportCard({ report, names }) {
         <div>
           <h2>Your nutrient report</h2>
           <p className="sub">
-            {period.days_logged !== undefined ? `${period.days_logged} days logged in the ${size} days before ${niceDate(report.date).toLowerCase()}. ` : ""}
-            Today counts once it's over.
+            Daily averages over the {size} days before {niceDate(report.date).toLowerCase()}
+            {period.days_logged !== undefined ? ` (${period.days_logged} with food logged)` : ""}.
+            {report.date === todayString() ? " Today is added once it's over." : ""}
           </p>
         </div>
         <Segmented value={size} onChange={setSize} options={[[7, "7 days"], [14, "14 days"]]} label="How many days" />
@@ -387,10 +412,14 @@ function ReportCard({ report, names }) {
           </Callout>
         )}
         {period.excesses.length > 0 && (
-          <Callout kind="red" icon="alert">
-            On average you're over the limit for {period.excesses.map((k) => niceName(k, names).toLowerCase()).join(", ")}.
-          </Callout>
+          <>
+            <div className="group-title" style={{ marginTop: 0 }}>Over the limit</div>
+            <div className="gap-cards">
+              {period.excesses.map((key) => <ExcessCard key={key} n={rows[key]} name={niceName(key, names)} />)}
+            </div>
+          </>
         )}
+        <div className="group-title" style={period.excesses.length ? undefined : { marginTop: 0 }}>Short on</div>
         {period.top_gaps.length === 0 ? (
           <Callout kind="brand" icon="check">
             {period.days_logged !== undefined && period.days_logged < 3
@@ -436,6 +465,32 @@ function ReportCard({ report, names }) {
           })}
         </div>
       </details>
+    </div>
+  );
+}
+
+// Something you've been having too much of, on average
+function ExcessCard({ n, name }) {
+  const none = n.upper_limit === 0;
+  const pct = none ? null : Math.round((100 * n.avg_intake) / n.upper_limit);
+  return (
+    <div className="gap-card excess">
+      <div className="between">
+        <strong>{name}</strong>
+        <span className="pct num">{none ? "none" : `${pct}%`}</span>
+      </div>
+      <Meter pct={none ? 100 : pct} />
+      <div className="small muted num">
+        about {amount(n.avg_intake)} {unit(n.unit)} a day, {none ? "where the advice is none" : `limit ${amount(n.upper_limit)} ${unit(n.unit)}`}
+      </div>
+      {n.days_over !== undefined && (
+        <div>
+          <div className="days-dots" title={`Over on ${n.days_over} of ${n.days_with_data} days`}>
+            {Array.from({ length: n.days_with_data }, (_, i) => <i key={i} className={i < n.days_over ? "over" : ""} />)}
+          </div>
+          <div className="faint tiny" style={{ marginTop: "0.3rem" }}>over the limit on {n.days_over} of {n.days_with_data} days</div>
+        </div>
+      )}
     </div>
   );
 }

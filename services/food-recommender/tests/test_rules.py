@@ -154,6 +154,12 @@ def test_numbers_are_rounded_for_reading():
     assert rules.show_number(0.143) == "0.14"
 
 
+def test_micrograms_are_written_with_the_mu_sign():
+    egg = food("Egg, chicken, whole, boiled", 506, {"vitamin_d": 2.0})       # 2.4 ug in 2 eggs (120 g)
+    _, covers = rules.score(egg, {"vitamin_d": 5.0})
+    assert "2.4 µg of vitamin D" in rules.explain(egg, covers, {"vitamin_d": "ug"})
+
+
 def test_explanation():
     _, covers = rules.score(LENTILS, {"iron": 10.0, "magnesium": 50})
     assert rules.explain(LENTILS, covers, UNITS) == (

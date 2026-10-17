@@ -249,7 +249,9 @@ function Targets({ result, names }) {
                       <td className="num nowrap">
                         {t.target_amount !== null && <>{amount(t.target_amount)} {unit(t.unit)}</>}
                         {t.target_amount === null && t.upper_limit !== null && <>under {amount(t.upper_limit)} {unit(t.unit)}</>}
-                        {t.target_amount !== null && t.upper_limit !== null && <div className="faint tiny">max {amount(t.upper_limit)}</div>}
+                        {t.target_amount !== null && t.upper_limit !== null && (
+                          <div className="faint tiny">max {amount(t.upper_limit)}{t.nutrient_key === "vitamin_a" ? " (retinol only)" : ""}</div>
+                        )}
                       </td>
                       <td className="faint tiny">{t.source}</td>
                     </tr>

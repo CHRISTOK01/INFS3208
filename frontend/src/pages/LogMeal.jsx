@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api.js";
 import Icon from "../components/Icon.jsx";
 import { Callout, Empty, Segmented, Skeleton, Stepper } from "../components/ui.jsx";
-import { dataLabel, niceDate, splitName } from "../format.js";
+import { dataLabel, niceDate, splitName, todayString } from "../format.js";
 import { notify } from "../toast.js";
 
 const MEALS = [
@@ -404,7 +404,7 @@ function DayTimeline({ day, meals, onDeleteMeal, onDeleteItem, onCatchUp }) {
       <div className="card-head">
         <div>
           <h2>{niceDate(day)}'s food</h2>
-          <p className="sub">Everything logged on {niceDate(day).toLowerCase()}.</p>
+          <p className="sub">{day === todayString() ? "Everything you've logged today." : `Everything you logged on ${niceDate(day)}.`}</p>
         </div>
       </div>
       {anyPending && (
@@ -423,30 +423,50 @@ function DayTimeline({ day, meals, onDeleteMeal, onDeleteItem, onCatchUp }) {
         <Empty icon="calendar" title="Nothing logged on this day">Meals you save show up here.</Empty>
       ) : (
         <div className="timeline">
-          {sorted.map((meal) => (
-            <div key={meal.id} className="meal">
-              <span className={`meal-icon ${meal.meal_type}`}><Icon name={MEAL_ICONS[meal.meal_type]} /></span>
-              <div>
-                <div className="between">
-                  <strong>
-                    {titleCase(meal.meal_type)}{" "}
-                    {meal.calc_status === "pending" && <span className="chip amber">totals pending</span>}
-                  </strong>
-                  <button className="btn small danger" onClick={() => onDeleteMeal(meal)}><Icon name="trash" size={15} /> Delete</button>
-                </div>
-                <ul>
-                  {meal.items.map((item) => (
-                    <li key={item.id}>
-                      <span>
-                        {splitName(item.name)[0]} <span className="faint">· {Math.round(item.grams)} g{item.portion_desc ? ` · ${item.portion_desc}` : ""}</span>
-                      </span>
-                      <button className="icon-btn danger" onClick={() => onDeleteItem(meal, item)} aria-label={`Remove ${item.name}`}><Icon name="x" size={14} /></button>
-                    </li>
+          {/* One section per meal type. If you saved breakfast in three goes, they sit together
+              under one "Breakfast", each with its own delete button. */}
+          {MEALS.map(([type, label, icon]) => {
+            const ofType = sorted.filter((m) => m.meal_type === type);
+            if (ofType.length === 0) return null;
+            const foods = ofType.reduce((n, m) => n + m.items.length, 0);
+            return (
+              <div key={type} className="meal">
+                <span className={`meal-icon ${type}`}><Icon name={icon} /></span>
+                <div>
+                  <div className="row" style={{ gap: "0.5rem" }}>
+                    <strong>{label}</strong>
+                    <span className="faint small">{foods} {foods === 1 ? "food" : "foods"}</span>
+                  </div>
+                  {ofType.map((meal) => (
+                    <div key={meal.id} className="meal-part">
+                      <ul>
+                        {meal.items.map((item) => (
+                          <li key={item.id}>
+                            <span className="item-name" title={item.name}>
+                              <span className="ink">{splitName(item.name)[0]}</span>
+                              {splitName(item.name)[1] && <span className="faint">, {splitName(item.name)[1]}</span>}
+                            </span>
+                            <span className="faint nowrap num">
+                              {Math.round(item.grams)} g{item.portion_desc ? ` · ${item.portion_desc}` : ""}
+                            </span>
+                            {meal.items.length > 1 && (
+                              <button className="icon-btn danger" onClick={() => onDeleteItem(meal, item)} aria-label={`Remove ${item.name}`} title="Remove this food"><Icon name="x" size={14} /></button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="part-actions">
+                        {meal.calc_status === "pending" && <span className="chip amber">totals pending</span>}
+                        <button className="icon-btn danger" onClick={() => onDeleteMeal(meal)} aria-label="Delete this meal" title={meal.items.length > 1 ? "Delete these foods" : "Delete"}>
+                          <Icon name="trash" size={15} />
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

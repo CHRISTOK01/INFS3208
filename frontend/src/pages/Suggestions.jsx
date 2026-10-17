@@ -73,9 +73,16 @@ export default function Suggestions({ user, day }) {
               {mode === "nutrient" && <p className="small muted">Scored against your whole daily target, whether you're short or not.</p>}
             </div>
             {result.energy_left_kcal !== null && (
-              <div className="stat" style={{ minWidth: 150 }}>
+              <div className="stat" style={{ minWidth: 170 }}>
                 <div className="k">Energy left today</div>
-                <div className="v num">{amount(result.energy_left_kcal)} <small>kcal</small></div>
+                {result.energy_left_kcal > 0 ? (
+                  <div className="v num">{amount(result.energy_left_kcal)} <small>kcal</small></div>
+                ) : (
+                  <>
+                    <div className="v">All used</div>
+                    <div className="faint tiny">so only light foods (150 kcal or less)</div>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -35,6 +35,18 @@ def test_above_the_upper_limit_is_an_excess():
     assert result["status"] == "excess"
 
 
+def test_days_over_the_limit_are_counted():
+    result = check_nutrient(IRON, [day(iron=50), day(iron=40), day(iron=55)])   # average 48.3, limit 45
+    assert result["status"] == "excess" and result["days_over"] == 2
+
+
+def test_lots_of_vitamin_a_is_not_called_an_excess():
+    # The 3,000 ug limit is for retinol only, and our total includes beta-carotene from plants
+    vitamin_a = {"nutrient_key": "vitamin_a", "target_amount": 700, "upper_limit": 3000, "unit": "ug"}
+    result = check_nutrient(vitamin_a, [day(vitamin_a=4000), day(vitamin_a=3500), day(vitamin_a=5000)])
+    assert result["status"] == "ok"
+
+
 def test_low_coverage_days_that_look_low_are_unknown_not_a_gap():
     # Two good days and two days where we only know magnesium for half the food. The half-known
     # days look low, but the missing foods might have had plenty, so we can't call it a gap.

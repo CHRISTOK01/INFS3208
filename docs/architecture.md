@@ -216,7 +216,8 @@ Calories and macros are a daily budget (`GET /api/gaps/today/...`). For each nut
 | Otherwise the partial totals are used as a minimum (`"is_minimum": true`) | the foods with no value could only add to them |
 | **gap** if the average is under 70% of the target, from real totals only | a minimum that looks low might not be, so that's "unknown" instead |
 | **ok** if the average reaches 70% of the target, even as a minimum | NHMRC targets cover nearly everyone, so a bit under isn't a worry |
-| **excess** if the average is above the upper limit | |
+| **excess** if the average is above the upper limit, with a count of the days over it | |
+| Vitamin A is never called an excess | its 3,000 µg upper limit is for retinol (from animal foods), but our total also counts beta-carotene from plants, which has no limit |
 | Sodium has no target, only an upper limit (2,000 mg for adults) | NHMRC only gives a range for the minimum, and the worry with sodium is too much |
 
 It also says how many days met the target, and lists the 5 biggest gaps (lowest % first). The

@@ -13,12 +13,16 @@ The rules:
     covers some of the food, so the real amount is at least that much, maybe more.
   - "gap"     the average is below 70% of the target. NHMRC targets are set high enough to cover
               nearly everyone, so being a little under isn't a worry. Well under, day after day, is.
-  - "excess"  the average is above the upper limit, where there is one.
+  - "excess"  the average is above the upper limit, where there is one (not for vitamin A, see below).
   - "ok"      anything else. Also "ok" when we only have partial totals but they already reach 70%
               of the target: the foods we're missing values for can only add to that.
   - "unknown" not enough data to say, or no target and no upper limit to compare with.
 """
 MACRO_KEYS = {"energy", "protein", "carbs", "fat"}
+# The NHMRC upper limit for vitamin A (3,000 ug) is for retinol, the kind in animal foods like liver.
+# The vitamin A we add up also counts beta-carotene from plants (carrots, pumpkin, sweet potato),
+# which has no upper limit, so a high total doesn't mean too much. We don't flag it as an excess.
+NO_EXCESS_CHECK = {"vitamin_a"}
 MIN_COVERAGE_PCT = 80
 MIN_DAYS = 3
 GAP_BELOW_PCT = 70
@@ -62,6 +66,7 @@ def check_nutrient(target: dict, days: list[dict]) -> dict:
         "pct_of_target": None,
         "is_minimum": is_minimum,   # true when the average only counts some of the food
         "days_met": 0,
+        "days_over": 0,             # days above the upper limit, if there is one
     }
     if len(amounts) < MIN_DAYS:
         return {**result, "status": "unknown",
@@ -72,8 +77,10 @@ def check_nutrient(target: dict, days: list[dict]) -> dict:
     if goal:
         result["pct_of_target"] = round(100 * avg / goal, 1)
         result["days_met"] = sum(1 for a in amounts if a >= goal)
+    if limit is not None:
+        result["days_over"] = sum(1 for a in amounts if a > limit)
 
-    if limit is not None and avg > limit:
+    if limit is not None and avg > limit and key not in NO_EXCESS_CHECK:
         reason = "the advice is to have none" if limit == 0 else f"average is above the upper limit of {limit:g} {unit}"
         return {**result, "status": "excess", "reason": reason}
     if not goal:

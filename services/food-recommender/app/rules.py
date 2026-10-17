@@ -249,7 +249,8 @@ def explain(food: dict, covers: list[dict], units: dict[str, str]) -> str:
     day) and 36 mg of magnesium (24%), for 87 kcal."."""
     parts = []
     for i, c in enumerate(covers):
-        text = f"{show_number(c['amount'])} {units.get(c['nutrient_key'], '')} of {nice_name(c['nutrient_key'])}"
+        unit = units.get(c["nutrient_key"], "").replace("ug", "µg")    # micrograms, written the usual way
+        text = f"{show_number(c['amount'])} {unit} of {nice_name(c['nutrient_key'])}"
         text += f" ({c['pct_of_shortfall']}% of what you're short each day)" if i == 0 else f" ({c['pct_of_shortfall']}%)"
         parts.append(text)
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
