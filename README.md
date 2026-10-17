@@ -19,7 +19,7 @@ It's made of four small services. Each runs in its own container with its own da
 
 The React website and the four services are all reached through one gateway at
 **http://localhost:8080**, which sends each request to the right place (on Kubernetes, the Ingress
-will do this job). The services talk to each other with plain REST calls; there are no message
+does this job). The services talk to each other with plain REST calls; there are no message
 queues. More detail on the design is in [docs/architecture.md](docs/architecture.md).
 
 ```
@@ -32,6 +32,15 @@ browser ──► gateway :8080 ──┬─ /               ─► frontend (Re
 
 It runs on your own computer with Docker Compose, and on Google Kubernetes Engine (GKE) across 2 VMs.
 The cloud deployment is explained step by step in [k8s/README.md](k8s/README.md).
+
+## Deploying to Google Kubernetes Engine (GKE)
+
+MacroScope runs on GKE in Sydney (`australia-southeast1`): 2 identical VMs, the 4 Postgres databases
+as StatefulSets with their own disks, Redis, and an HTTPS Ingress. It's live at
+**https://34-120-54-167.nip.io**. The full step-by-step guide, with every command commented, is in
+[k8s/README.md](k8s/README.md). The order is: build and push the images, create the cluster, apply
+the manifests, load the data, then the demo commands for scaling, pod failure, rolling update and
+rollback. Deploying needs the Google Cloud CLI (`gcloud`); `kubectl` comes with Docker Desktop.
 
 ## What you need
 
@@ -369,6 +378,10 @@ The main food data is Australian: AUSNUT 2023 from Food Standards Australia New 
 foods with complete nutrient data, CC BY 4.0). USDA FoodData Central (public domain) fills in
 everything else, including packaged foods with barcodes. Targets come from the Australian NHMRC
 Nutrient Reference Values. The files are too big for git, so the repo has scripts to download them.
+
+`etl/data/` isn't in git. The submission ZIP includes the AUSNUT files (`etl/data/ausnut/`, about
+6 MB, CC BY 4.0), so only the USDA data (about 440 MB) needs downloading, with
+`python etl/download_usda.py`. From git, run `python etl/download_ausnut.py` as well.
 
 The last load put **1,030,440 rows** into the databases, including 47,334 foods and 864,594
 nutrient values. The full counts, and how the data is cleaned, are in [etl/README.md](etl/README.md).

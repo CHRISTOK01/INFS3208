@@ -17,7 +17,9 @@ that Australian ones don't. Using US data for an Australian user gets those nutr
 We don't keep the data files in git. The Branded foods file alone is about 3 GB once it's unzipped,
 GitHub won't accept files over 100 MB, and the data is public anyway, so anyone can download it
 again. `etl/data/` is ignored by git (apart from an empty `.gitkeep` file that keeps the folder
-there). What's in the repo is the script that downloads the data.
+there). What's in the repo are the scripts that download it: `download_ausnut.py` and
+`download_usda.py`. The submission ZIP includes the AUSNUT files (`etl/data/ausnut/`, about 6 MB,
+CC BY 4.0), so only the USDA download is needed from it.
 
 ## 1. Download the data
 
@@ -79,7 +81,7 @@ docker compose run --rm --entrypoint pytest etl -v tests
 
 Each service only gets the part of the data it needs, written into its own database with Postgres
 COPY (which sends rows in bulk rather than one at a time). Foods are matched across services by
-their USDA `fdc_id`.
+their `fdc_id` (the USDA ID, or the 8-digit AUSNUT survey ID for Australian foods).
 
 | Database | Table | What goes in it |
 |---|---|---|
@@ -152,12 +154,9 @@ and for why a few upper limits are left empty and how sodium is handled.
 
 ## Things to remember
 
-- **For the submission ZIP:** include a small trimmed sample so the marker can see what the data
-  looks like, along with this download script for the full set. The other option is a link to the
-  exact CSVs we used. If we do that, open the link in a private browser window first to make sure
-  it works. Still to do: ask on Ed Discussion which one the marker prefers.
-- **For GKE:** the databases in the cloud need the data too. We can either run the loader as a
-  Kubernetes Job, or port-forward to the Postgres pods and load from a laptop. We'll decide when we
-  get to deployment.
-- Write down the final row counts that `load_usda.py` prints, so we can quote them in the report
-  and the demo.
+- **The submission ZIP** includes the AUSNUT files; the USDA data (about 440 MB) is left out
+  because of its size, and `download_usda.py` fetches it.
+- **On GKE**, the cloud databases got their data by copying the local ones with `pg_dump` and
+  `pg_restore` (step 7 of [k8s/README.md](../k8s/README.md)). Loading from scratch also works, by
+  port-forwarding to the database pods and running the loader.
+- The row counts above are from the last full load, and are the ones quoted in the README.

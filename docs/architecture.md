@@ -16,7 +16,7 @@ service's name, for example `http://nutrient-calc:8002`. The addresses come from
 
 - meal-logging calls nutrient-calc with `PUT /api/nutrients/daily/{user}/{date}`, sending all of that day's food
 - gap-analysis calls nutrient-calc with `GET /api/nutrients/daily/{user}?start&end` to get the recent history
-- food-recommender calls gap-analysis with `GET /api/gaps/report/{user}` (the gaps) and `GET /api/gaps/today/{user}` (calories left, today's amounts and limits, diet and pregnancy)
+- food-recommender calls gap-analysis with `GET /api/gaps/today/{user}` (calories left, today's amounts and limits, diet and pregnancy), and for weekly suggestions also `GET /api/gaps/report/{user}` (the 7-day gaps)
 
 There are no message queues. Every call is a plain request that waits for its answer.
 
@@ -87,7 +87,7 @@ straight away. It finishes the requests it's already handling (for up to 10 seco
 service closes its database connections.
 
 **All settings come from environment variables.** That means the exact same image runs in Docker
-Compose and on Kubernetes, where the settings will come from a ConfigMap and a Secret.
+Compose and on Kubernetes, where the settings come from a ConfigMap and a Secret.
 
 ## Logging in (auth)
 
@@ -280,9 +280,11 @@ never zero.
 **For variety**, only the best food of each kind is kept (the part of the name before the first
 comma, so one "Beef" not five cuts of it), and at most 3 come from each food group.
 
-Each suggestion explains itself, like "A standard serve (100 g) gives 8.8 ug of vitamin B12 (100%
-of what you're short each day), 114 ug of selenium (100%) and 5 ug of vitamin D (99%), for 124
-kcal." (that one is cooked sardines).
+Each suggestion in the API reply comes with the numbers behind it (the serve size, its energy, and
+how much of each gap it fills, which the website shows as bars) and a plain sentence in `why`, like
+"A standard serve (100 g) gives 8.8 µg of vitamin B12 (100% of what you're short each day), 114 µg
+of selenium (100%) and 5 µg of vitamin D (99%), for 124 kcal." (that one is cooked sardines). It
+also has a short label for the kind of food, like "Nuts & seeds" or "Fish & seafood".
 
 **If nothing fits**, the first note says why, using the most common reason that's about today (like "most foods would take you over your limit for sodium today").
 
@@ -321,6 +323,33 @@ out of date.
 
 **The footer** checks each service's `/version` every 30 seconds and shows the `X-Served-By` header
 from the last answer, so you can watch load balancing, a rolling update or a rollback happen.
+
+## Running on Kubernetes (GKE)
+
+The same images run on a GKE cluster in Sydney (`australia-southeast1-a`) with 2 identical
+`e2-standard-2` VMs. The manifests are in `k8s/`, and `k8s/README.md` has every command. In short:
+
+| Part | How it runs | File |
+|---|---|---|
+| The 4 databases | a StatefulSet each (1 pod, `postgres:18`) with its own 5 GB persistent disk, a headless Service for its stable name, and its `init.sql` from a ConfigMap | `10-databases.yaml` |
+| Redis | a Deployment with 1 pod (it's only a cache, so it keeps nothing on disk) | `20-redis.yaml` |
+| The 4 services | a Deployment each, 2 pods to start; `/health` is the liveness check and `/ready` the readiness check; rolling updates add a new pod before removing an old one (`maxUnavailable: 0`); a 5-second pause before shutting down so the load balancer stops sending requests first | `30-services.yaml` |
+| The website | a Deployment with 2 pods of the Nginx image | `40-frontend.yaml` |
+| Autoscaling | HorizontalPodAutoscalers at 60% CPU: meal-logging and nutrient-calc 2-6 pods, gap-analysis and food-recommender 2-4 | `50-autoscaling.yaml` |
+| The front door | a GCE Ingress (Google's HTTPS load balancer) on a reserved IP, with the same path routing as the local gateway, a Google-managed certificate for `34-120-54-167.nip.io`, and an http-to-https redirect | `60-ingress.yaml` |
+
+**One copy of each service on each VM.** The services and the website have a firm spread rule
+(`topologySpreadConstraints` with `whenUnsatisfiable: DoNotSchedule`), checked separately for each
+version, so their 2 pods always run on different VMs, including during rolling updates. If one VM
+fails, the other keeps everything running. The databases can't run two copies, so each keeps its
+data on its own disk; if its VM fails, Kubernetes restarts it on the other VM and re-attaches the
+disk.
+
+**Settings and secrets** come from a ConfigMap (`macroscope-config`: project ID, Web API key, log
+level) and a Secret (`macroscope-secrets`: the JWT secret and database passwords), made by commands
+rather than stored in the manifests. **The image tag is the version** that `/version` reports, so a
+rolling update or a rollback shows in the website footer. The food data and demo users were copied
+in from the local databases with `pg_dump` and `pg_restore` (step 7 of the guide).
 
 ## Demo users and the load test
 
