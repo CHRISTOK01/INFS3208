@@ -1,8 +1,9 @@
 # Deploying MacroScope to Google Kubernetes Engine (GKE)
 
-This puts the same app that runs in Docker Compose onto a GKE cluster in Sydney
-(`australia-southeast1`). Nothing in the code changes: the same images, configured with
-environment variables.
+This is how MacroScope was deployed to its GKE cluster in Sydney (`australia-southeast1`), where it
+runs live at https://34-120-54-167.nip.io. It's the same app that runs in Docker Compose. Nothing in
+the code changes: the same images, configured with environment variables. Every command we ran is
+here, in order, with what it does.
 
 ```
 browser ──HTTPS──► Google load balancer (the Ingress, 60-ingress.yaml) at https://<ip>.nip.io
@@ -36,8 +37,13 @@ cost a little while the VMs are off).
 
 All commands are for **PowerShell**, run from the project folder.
 
-**The project ID `just-tracer-294608` appears throughout this guide.** Anyone else must replace it
-with their own project ID, including in the registry path `$REG` (step 2), which contains it, and in
+**Before you start, set the app up on your computer** (["Setting it up on your computer" in the
+main README](../README.md)): the `.env` file, Google login, and the food data and demo users loaded
+into the local databases. This guide reads the Web API key from `.env` (step 5) and copies the data
+from the local databases into the cloud ones (step 7).
+
+**The project ID `just-tracer-294608` appears throughout this guide.** To follow it in a different
+Google Cloud project, replace it with that project's ID, including in the registry path `$REG` (step 2), which contains it, and in
 the image names in `30-services.yaml` and `40-frontend.yaml`.
 
 ## 0. Once: install the Google Cloud CLI and log in
@@ -82,18 +88,24 @@ gcloud artifacts repositories create macroscope --repository-format=docker --loc
 #   auth configure-docker <host>  tell Docker to use gcloud's login for that registry address
 gcloud auth configure-docker australia-southeast1-docker.pkg.dev
 
+# The version of each image. These must match the image tags in 30-services.yaml and
+# 40-frontend.yaml, or Kubernetes can't find the images.
+#   @{ name = value; ... }  a lookup table (a "hashtable")
+$versions = @{ "meal-logging" = "1.0.1"; "nutrient-calc" = "1.0.0"; "gap-analysis" = "1.0.1"; "food-recommender" = "1.0.2" }
+
 # Build each service with its version baked in, and push (upload) it
-#   foreach ($s in ...)            repeat for each of the 4 services
-#   --build-arg APP_VERSION=1.0.0  the version the image reports at /version (and in the website footer)
-#   -t                             the image's name and tag (the tag is the version)
-#   docker push                    upload the image to the registry
-foreach ($s in "meal-logging", "nutrient-calc", "gap-analysis", "food-recommender") {
-    docker build --build-arg APP_VERSION=1.0.0 -t "$REG/${s}:1.0.0" "services/$s"
-    docker push "$REG/${s}:1.0.0"
+#   foreach ($s in $versions.Keys)  repeat for each of the 4 services
+#   --build-arg APP_VERSION=<v>     the version the image reports at /version (and in the website footer)
+#   -t                              the image's name and tag (the tag is the version)
+#   docker push                     upload the image to the registry
+foreach ($s in $versions.Keys) {
+    $v = $versions[$s]
+    docker build --build-arg APP_VERSION=$v -t "$REG/${s}:$v" "services/$s"
+    docker push "$REG/${s}:$v"
 }
 # The website the same way (it has no /version, so no --build-arg)
-docker build -t "$REG/frontend:1.0.0" frontend
-docker push "$REG/frontend:1.0.0"
+docker build -t "$REG/frontend:1.0.6" frontend
+docker push "$REG/frontend:1.0.6"
 ```
 
 ## 3. Make the cluster (the 2 VMs)
