@@ -42,7 +42,7 @@ main README](../README.md)): the `.env` file, Google login, and the food data an
 into the local databases. This guide reads the Web API key from `.env` (step 5) and copies the data
 from the local databases into the cloud ones (step 7).
 
-**The project ID `just-tracer-294608` appears throughout this guide.** To follow it in a different
+**The project ID `<your-project-id>` appears throughout this guide.** To follow it in a different
 Google Cloud project, replace it with that project's ID, including in the registry path `$REG` (step 2), which contains it, and in
 the image names in `30-services.yaml` and `40-frontend.yaml`.
 
@@ -58,7 +58,7 @@ gcloud auth login
 
 # Use your project for every gcloud command from now on
 #   config set project <id>  save <id> as the default project
-gcloud config set project just-tracer-294608
+gcloud config set project <your-project-id>
 
 # Add the plugin kubectl needs to log in to GKE clusters
 #   components install <name>  add an optional part of the Google Cloud CLI
@@ -77,7 +77,7 @@ gcloud services enable container.googleapis.com artifactregistry.googleapis.com 
 
 ```powershell
 # Where the images go (a private Docker registry in our project, in Sydney)
-$REG = "australia-southeast1-docker.pkg.dev/just-tracer-294608/macroscope"
+$REG = "australia-southeast1-docker.pkg.dev/<your-project-id>/macroscope"
 
 # Make the registry (only once)
 #   --repository-format=docker  it holds Docker images
@@ -171,7 +171,7 @@ $KEY = ((Get-Content .env) | Where-Object { $_ -match '^GOOGLE_API_KEY=' }) -rep
 #   --from-literal=K=V    one setting
 #   `                     (backtick at the end of a line) the command carries on on the next line
 kubectl create configmap macroscope-config -n macroscope `
-  --from-literal=GOOGLE_PROJECT_ID=just-tracer-294608 `
+  --from-literal=GOOGLE_PROJECT_ID=<your-project-id> `
   --from-literal=GOOGLE_API_KEY=$KEY `
   --from-literal=LOG_LEVEL=INFO
 
@@ -366,7 +366,7 @@ because recovery takes several minutes and is worth checking calmly. Then confir
 # Every pod is "Running" and "1/1" ready
 kubectl get pods -n macroscope
 
-# The Ingress has its IP address (34.120.54.167)
+# The Ingress has its IP address (the $IP from step 4)
 kubectl get ingress -n macroscope
 
 # The managed certificate says "Active"
@@ -375,7 +375,7 @@ kubectl get managedcertificate -n macroscope -o custom-columns=NAME:.metadata.na
 
 # The site answers (200 means it loaded)
 #   -s -o NUL -w "%{http_code}"  print only the HTTP status code
-curl.exe -s -o NUL -w "%{http_code}" https://34-120-54-167.nip.io/
+curl.exe -s -o NUL -w "%{http_code}" https://<your-domain>/
 ```
 
 ## Deleting it all

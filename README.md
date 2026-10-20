@@ -99,7 +99,7 @@ docker compose run --rm etl
 # 7. Make the demo users, with 3 weeks of meals each (takes about a minute)
 #   -e TODAY=...           today's date where you are (the container's clock is on UTC)
 #   --entrypoint python    run this script instead of the loader
-docker compose run --rm -e TODAY=2026-10-17 --entrypoint python etl seed_demo_users.py
+docker compose run --rm -e TODAY=<YYYY-MM-DD> --entrypoint python etl seed_demo_users.py
 ```
 
 In PowerShell you can fill in today's date for step 7 automatically:
