@@ -55,7 +55,7 @@ You need:
 
 - **Docker Desktop**, running. It includes Docker Compose and `kubectl`. Docker builds the images,
   and runs the loader that prepares the food data before it's copied to the cloud.
-- **Python 3.12 or newer**, to download the food data.
+- **Python 3.12 or newer**, to download the food data and make random passwords.
 - **A Google Cloud project with billing turned on** (free credits are fine).
 - **The Google Cloud CLI (`gcloud`)**. Install it, then close and reopen the terminal:
   - Windows: `winget install Google.CloudSDK`
@@ -145,13 +145,13 @@ docker compose ps
 ```
 
 You should see 11 containers (the 4 services, their 4 databases, redis, frontend and gateway), all
-"healthy". If it says "failed to connect to the docker API" or "Cannot connect to the Docker
-daemon", Docker Desktop isn't running: open it, wait until it says it's running, and try again.
- If any aren't, wait a little and run `docker compose ps` again. If one keeps restarting,
-`docker compose logs <name>` shows why (most often a value in `.env`).
+"healthy". If any aren't, wait a little and run `docker compose ps` again. If one keeps
+restarting, `docker compose logs <name>` shows why (most often a value in `.env`). If it says
+"failed to connect to the docker API" or "Cannot connect to the Docker daemon", Docker Desktop
+isn't running: open it, wait until it says it's running, and try again.
 
 **3b. Download the food data** into `etl/data/`: the Australian data (about 6 MB, already there if
-you're working from the submission ZIP) and the USDA data (about 440 MB to download, 3 GB unpacked).
+you have the project as a ZIP) and the USDA data (about 440 MB to download, 3 GB unpacked).
 
 Windows (PowerShell):
 
@@ -623,14 +623,10 @@ gcloud container clusters resize macroscope --node-pool $(gcloud container node-
 The pods start again within a few minutes. Then check with step 14 (run step 8's first block in
 the terminal first, so `$DOMAIN` is set).
 
-**Before marking:** if the nodes are scaled to 0, scale back to 2 **at least a day before marking**,
-because recovery takes several minutes and is worth checking calmly with step 14.
-
 ## Deleting it all
 
-> **Warning: don't run this section until the assignment has been marked.** The app must be live on
-> GKE during the Week 13 marking session. Deleting the cluster or the IP address can't be undone:
-> rebuilding means a new IP, a new nip.io address and certificate, and loading the data again.
+Deleting can't be undone. Unlike pausing, it removes the data and the IP address, so bringing the
+app back means going through steps 6-14 again, with a new nip.io address and certificate.
 
 This deletes the cluster (with its VMs and load balancer), the IP address, and the image registry
 with every image in it. Each asks you to confirm. The last command lists any disks left behind;

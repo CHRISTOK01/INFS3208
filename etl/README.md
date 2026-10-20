@@ -20,7 +20,7 @@ We don't keep the data files in git. The Branded foods file alone is about 3 GB 
 GitHub won't accept files over 100 MB, and the data is public anyway, so anyone can download it
 again. `etl/data/` is ignored by git (apart from an empty `.gitkeep` file that keeps the folder
 there). What's in the repo are the scripts that download it: `download_ausnut.py` and
-`download_usda.py`. The submission ZIP includes the AUSNUT files (`etl/data/ausnut/`, about 6 MB,
+`download_usda.py`. The project's ZIP includes the AUSNUT files (`etl/data/ausnut/`, about 6 MB,
 CC BY 4.0), so only the USDA download is needed from it.
 
 ## 1. Download the data
@@ -156,7 +156,7 @@ and for why a few upper limits are left empty and how sodium is handled.
 
 ## Things to remember
 
-- **The submission ZIP** includes the AUSNUT files; the USDA data (about 440 MB) is left out
+- **The project's ZIP** includes the AUSNUT files; the USDA data (about 440 MB) is left out
   because of its size, and `download_usda.py` fetches it.
 - **On GKE**, the cloud databases got their data by copying the local ones with `pg_dump` and
   `pg_restore` (step 11 of the [README](../README.md)). Loading from scratch also works, by

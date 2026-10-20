@@ -33,7 +33,7 @@ docker compose up --build -d
 docker compose ps
 
 # 5. Download the food data into etl/data/ (only needed once)
-#    The Australian data (about 6 MB; already there if you're working from the submission ZIP)
+#    The Australian data (about 6 MB; already there if you have the project as a ZIP)
 #    and the USDA data (about 440 MB)
 python etl/download_ausnut.py
 python etl/download_usda.py
