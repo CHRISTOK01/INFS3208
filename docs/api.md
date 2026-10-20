@@ -1,5 +1,7 @@
 # MacroScope API
 
+> Part of the MacroScope docs. Start at the [README](../README.md), which also lists where everything else is.
+
 Every service is reached through the gateway (`http://localhost:8080` on your computer, or
 `https://34-120-54-167.nip.io` on GKE). Each one also has a page where you can try its API in the
 browser, for example http://localhost:8080/api/nutrients/docs (swap `nutrients` for `meals`, `gaps`

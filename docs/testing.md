@@ -1,8 +1,10 @@
 # Tests, demos and working on the code
 
-These assume the app is running on your computer and the data is loaded (see "Setting it up on
-your computer" in the [README](../README.md)). The same demos on GKE are at the end of
-[k8s/README.md](../k8s/README.md).
+> Part of the MacroScope docs. Start at the [README](../README.md), which also lists where everything else is.
+
+These assume the app is running on your computer and the data is loaded (see
+[running-locally.md](running-locally.md)). The same demos on GKE are under "Demo commands" in the
+[README](../README.md).
 
 ## Running the tests
 

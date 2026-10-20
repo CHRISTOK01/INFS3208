@@ -1,5 +1,7 @@
 # MacroScope architecture notes
 
+> Part of the MacroScope docs. Start at the [README](../README.md), which also lists where everything else is. The commands to deploy are in the README; this explains the design behind them.
+
 ## How a request gets around
 
 ```
@@ -327,7 +329,7 @@ from the last answer, so you can watch load balancing, a rolling update or a rol
 ## Running on Kubernetes (GKE)
 
 The same images run on a GKE cluster in Sydney (`australia-southeast1-a`) with 2 identical
-`e2-standard-2` VMs. The manifests are in `k8s/`, and `k8s/README.md` has every command. In short:
+`e2-standard-2` VMs. The manifests are in `k8s/`, and the main `README.md` has every command. In short:
 
 | Part | How it runs | File |
 |---|---|---|

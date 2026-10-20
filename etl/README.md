@@ -1,5 +1,7 @@
 # ETL: getting the food data into the databases
 
+> Part of the MacroScope docs. Start at the [main README](../README.md), which also lists where everything else is. The commands to load the data as part of deploying are in its step 3.
+
 MacroScope uses two sources of food data:
 
 - **Australian: AUSNUT 2023** from Food Standards Australia New Zealand (FSANZ). 3,741 foods as
@@ -157,6 +159,6 @@ and for why a few upper limits are left empty and how sodium is handled.
 - **The submission ZIP** includes the AUSNUT files; the USDA data (about 440 MB) is left out
   because of its size, and `download_usda.py` fetches it.
 - **On GKE**, the cloud databases got their data by copying the local ones with `pg_dump` and
-  `pg_restore` (step 7 of [k8s/README.md](../k8s/README.md)). Loading from scratch also works, by
+  `pg_restore` (step 11 of the [README](../README.md)). Loading from scratch also works, by
   port-forwarding to the database pods and running the loader.
 - The row counts above are from the last full load, and are the ones quoted in the README.

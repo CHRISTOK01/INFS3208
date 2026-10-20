@@ -1,5 +1,7 @@
 # The reference intakes
 
+> Part of the MacroScope docs. Start at the [main README](../README.md); the food data as a whole is described in [etl/README.md](README.md).
+
 `reference_intakes.csv` holds the NHMRC values gap-analysis uses as targets, by sex, age band
 (14-18, 19-30, 31-50, 51-70, 71+) and life stage (none, pregnant, breastfeeding). They come from the
 NHMRC Nutrient Reference Values for Australia and New Zealand:
